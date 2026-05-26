@@ -13,9 +13,8 @@ import {
 import "leaflet/dist/leaflet.css";
 
 const OVERPASS_URLS = [
-  "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
-  "https://overpass.openstreetmap.ru/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
 ];
 
 function RecenterMap({ position }) {
@@ -57,8 +56,7 @@ export default function MapView() {
         const lat = location.coords.latitude;
         const lng = location.coords.longitude;
 
-        const newPosition = [lat, lng];
-        setPosition(newPosition);
+        setPosition([lat, lng]);
 
         const cachedHospitals = getCachedHospitals(lat, lng);
 
@@ -107,37 +105,51 @@ export default function MapView() {
       lng,
     };
 
+    // Fast Overpass query
     const query = `
-      [out:json][timeout:10];
+      [out:json][timeout:6];
       (
-        node["amenity"="hospital"](around:8000,${lat},${lng});
-        way["amenity"="hospital"](around:8000,${lat},${lng});
-        relation["amenity"="hospital"](around:8000,${lat},${lng});
-
-        node["healthcare"="hospital"](around:8000,${lat},${lng});
-        way["healthcare"="hospital"](around:8000,${lat},${lng});
-        relation["healthcare"="hospital"](around:8000,${lat},${lng});
-
-        node["amenity"="clinic"](around:5000,${lat},${lng});
-        node["healthcare"="clinic"](around:5000,${lat},${lng});
-
-        node["amenity"="doctors"](around:5000,${lat},${lng});
+        node["amenity"="hospital"](around:6000,${lat},${lng});
+        node["healthcare"="hospital"](around:6000,${lat},${lng});
+        node["amenity"="clinic"](around:6000,${lat},${lng});
+        node["healthcare"="clinic"](around:6000,${lat},${lng});
+        node["amenity"="doctors"](around:6000,${lat},${lng});
       );
-      out center tags;
+      out tags;
     `;
 
-    let response = null;
+    let hospitalData = [];
 
+    // Try Overpass first
     for (const url of OVERPASS_URLS) {
       try {
-        response = await axios.post(url, query, {
+        const response = await axios.post(url, query, {
           headers: {
             "Content-Type": "text/plain",
           },
-          timeout: 12000,
+          timeout: 8000,
         });
 
-        if (response?.data?.elements) {
+        hospitalData = response.data.elements
+          .map((item) => {
+            if (!item.lat || !item.lon) {
+              return null;
+            }
+
+            return {
+              id: item.id,
+              name: item.tags?.name || getDefaultMedicalName(item.tags),
+              lat: item.lat,
+              lon: item.lon,
+              distance: getDistanceKm(lat, lng, item.lat, item.lon),
+              type: getMedicalType(item.tags),
+            };
+          })
+          .filter(Boolean)
+          .filter((place) => place.distance <= 8)
+          .sort((a, b) => a.distance - b.distance);
+
+        if (hospitalData.length > 0) {
           break;
         }
       } catch (err) {
@@ -145,56 +157,52 @@ export default function MapView() {
       }
     }
 
-    if (!response?.data?.elements) {
-      setHospitals([]);
-      setError("Hospital search server is busy. Please try Refresh.");
-      setLoadingHospitals(false);
-      return;
+    // If Overpass fails, use Nominatim fallback
+    if (hospitalData.length === 0) {
+      try {
+        const nominatim = await axios.get(
+          "https://nominatim.openstreetmap.org/search",
+          {
+            params: {
+              format: "json",
+              q: "hospital",
+              limit: 8,
+              bounded: 1,
+              viewbox: `${lng - 0.08},${lat + 0.08},${lng + 0.08},${lat - 0.08}`,
+            },
+            timeout: 8000,
+          }
+        );
+
+        hospitalData = nominatim.data
+          .map((item) => ({
+            id: item.place_id,
+            name: item.display_name?.split(",")[0] || "Nearby Hospital",
+            lat: Number(item.lat),
+            lon: Number(item.lon),
+            distance: getDistanceKm(
+              lat,
+              lng,
+              Number(item.lat),
+              Number(item.lon)
+            ),
+            type: "Hospital",
+          }))
+          .filter((place) => place.distance <= 10)
+          .sort((a, b) => a.distance - b.distance);
+      } catch (err) {
+        console.log("NOMINATIM FAILED:", err);
+      }
     }
 
-    const uniqueMap = new Map();
+    if (hospitalData.length > 0) {
+      const topHospitals = removeDuplicates(hospitalData).slice(0, 8);
 
-    response.data.elements.forEach((item) => {
-      const hospitalLat = item.lat || item.center?.lat;
-      const hospitalLon = item.lon || item.center?.lon;
-
-      if (!hospitalLat || !hospitalLon) return;
-
-      const name =
-        item.tags?.name ||
-        item.tags?.["name:en"] ||
-        item.tags?.operator ||
-        getDefaultMedicalName(item.tags);
-
-      const distance = getDistanceKm(lat, lng, hospitalLat, hospitalLon);
-
-      if (distance > 8) return;
-
-      const key = `${name}-${hospitalLat.toFixed(5)}-${hospitalLon.toFixed(5)}`;
-
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, {
-          id: item.id || key,
-          name,
-          lat: hospitalLat,
-          lon: hospitalLon,
-          distance,
-          type: getMedicalType(item.tags),
-        });
-      }
-    });
-
-    const hospitalData = Array.from(uniqueMap.values()).sort(
-      (a, b) => a.distance - b.distance
-    );
-
-    if (hospitalData.length === 0) {
-      setHospitals([]);
-      setError("No real medical center found nearby. Try Refresh or check location permission.");
-    } else {
-      const topHospitals = hospitalData.slice(0, 8);
       setHospitals(topHospitals);
       saveCachedHospitals(lat, lng, topHospitals);
+    } else {
+      setHospitals([]);
+      setError("No hospital found nearby. Use Google Maps search.");
     }
 
     setLoadingHospitals(false);
@@ -299,7 +307,9 @@ export default function MapView() {
                 position={[hospital.lat, hospital.lon]}
               >
                 <Popup>
-                  <b>{index + 1}. {hospital.name}</b>
+                  <b>
+                    {index + 1}. {hospital.name}
+                  </b>
                   <br />
                   {hospital.type}
                   <br />
@@ -320,7 +330,8 @@ export default function MapView() {
           </h2>
 
           <p className="text-gray-400 mt-2">
-            Real medical places from OpenStreetMap. Open Google Maps for live guidance.
+            Real medical places from OpenStreetMap. Open Google Maps for live
+            guidance.
           </p>
 
           {loadingHospitals && (
@@ -341,6 +352,16 @@ export default function MapView() {
           >
             Refresh Nearby Help
           </button>
+
+          <a
+            href={`https://www.google.com/maps/search/hospital+near+me/@${position[0]},${position[1]},14z`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <button className="mt-3 w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold">
+              Open Hospitals in Google Maps
+            </button>
+          </a>
 
           <div className="mt-6 space-y-4 max-h-[55vh] overflow-y-auto pr-2">
             {hospitals.map((hospital, index) => (
@@ -375,7 +396,7 @@ export default function MapView() {
 
             {!loadingHospitals && hospitals.length === 0 && (
               <p className="text-gray-400 text-center">
-                No hospital data available. Try Refresh.
+                No hospital data available. Try Refresh or open Google Maps.
               </p>
             )}
           </div>
@@ -415,6 +436,20 @@ function getDefaultMedicalName(tags = {}) {
   }
 
   return "Nearby Medical Help";
+}
+
+function removeDuplicates(places) {
+  const map = new Map();
+
+  places.forEach((place) => {
+    const key = `${place.name}-${place.lat.toFixed(5)}-${place.lon.toFixed(5)}`;
+
+    if (!map.has(key)) {
+      map.set(key, place);
+    }
+  });
+
+  return Array.from(map.values());
 }
 
 function saveCachedHospitals(lat, lng, hospitals) {
