@@ -68,16 +68,21 @@ export default function MapView() {
   const fetchHospitals = async (lat, lng) => {
     setLoadingHospitals(true);
     setError("");
+    setRoute([]);
+    setSelectedHospital(null);
 
     try {
       const query = `
-        [out:json][timeout:8];
+        [out:json][timeout:15];
         (
-          node["amenity"="hospital"](around:5000,${lat},${lng});
-          node["healthcare"="hospital"](around:5000,${lat},${lng});
-          node["amenity"="clinic"](around:5000,${lat},${lng});
+          node["amenity"="hospital"](around:10000,${lat},${lng});
+          way["amenity"="hospital"](around:10000,${lat},${lng});
+          relation["amenity"="hospital"](around:10000,${lat},${lng});
+          node["healthcare"="hospital"](around:10000,${lat},${lng});
+          way["healthcare"="hospital"](around:10000,${lat},${lng});
+          relation["healthcare"="hospital"](around:10000,${lat},${lng});
         );
-        out tags;
+        out center tags;
       `;
 
       const response = await axios.post(
@@ -87,35 +92,48 @@ export default function MapView() {
           headers: {
             "Content-Type": "text/plain",
           },
-          timeout: 10000,
+          timeout: 20000,
         }
       );
 
       const hospitalData = response.data.elements
         .map((item) => {
-          if (!item.lat || !item.lon) return null;
+          const hospitalLat = item.lat || item.center?.lat;
+          const hospitalLon = item.lon || item.center?.lon;
+
+          if (!hospitalLat || !hospitalLon) {
+            return null;
+          }
 
           return {
             id: item.id,
-            name: item.tags?.name || "Nearby Medical Center",
-            lat: item.lat,
-            lon: item.lon,
-            distance: getDistanceKm(lat, lng, item.lat, item.lon),
+            name: item.tags?.name || "Unnamed Hospital",
+            lat: hospitalLat,
+            lon: hospitalLon,
+            distance: getDistanceKm(
+              lat,
+              lng,
+              hospitalLat,
+              hospitalLon
+            ),
           };
         })
         .filter(Boolean)
+        .filter((hospital) => hospital.distance <= 10)
         .sort((a, b) => a.distance - b.distance);
 
-      if (hospitalData.length > 0) {
-        setHospitals(hospitalData.slice(0, 6));
+      if (hospitalData.length === 0) {
+        setHospitals([]);
+        setError(
+          "No real hospital found nearby. Try refresh or allow accurate location."
+        );
       } else {
-        setHospitals(getFallbackHospitals(lat, lng));
-        setError("Live hospital search found no result. Showing emergency fallback locations.");
+        setHospitals(hospitalData.slice(0, 8));
       }
     } catch (err) {
       console.log("HOSPITAL ERROR:", err);
-      setHospitals(getFallbackHospitals(lat, lng));
-      setError("Live hospital search is slow. Showing emergency fallback locations.");
+      setHospitals([]);
+      setError("Hospital search failed. Please try again.");
     }
 
     setLoadingHospitals(false);
@@ -149,7 +167,8 @@ export default function MapView() {
         }
       );
 
-      const coords = response.data.features[0].geometry.coordinates;
+      const coords =
+        response.data.features[0].geometry.coordinates;
 
       const convertedCoords = coords.map((coord) => [
         coord[1],
@@ -159,7 +178,9 @@ export default function MapView() {
       setRoute(convertedCoords);
     } catch (err) {
       console.log("ROUTE ERROR:", err);
-      setError("Fastest route failed. Google Maps navigation will still open.");
+      setError(
+        "Fastest route failed. Google Maps navigation will still open."
+      );
     }
 
     setRouteLoading(false);
@@ -168,7 +189,12 @@ export default function MapView() {
   const startLiveNavigation = (hospital) => {
     setSelectedHospital(hospital);
 
-    getRoute(position[0], position[1], hospital.lat, hospital.lon);
+    getRoute(
+      position[0],
+      position[1],
+      hospital.lat,
+      hospital.lon
+    );
 
     window.open(
       `https://www.google.com/maps/dir/?api=1&origin=${position[0]},${position[1]}&destination=${hospital.lat},${hospital.lon}&travelmode=driving`,
@@ -191,7 +217,7 @@ export default function MapView() {
       </h1>
 
       {error && (
-        <div className="mb-6 p-4 rounded-2xl bg-yellow-500/20 border border-yellow-500/30 text-yellow-300 text-center">
+        <div className="mb-6 p-4 rounded-2xl bg-red-500/20 border border-red-500/30 text-red-300 text-center">
           {error}
         </div>
       )}
@@ -234,12 +260,12 @@ export default function MapView() {
           </h2>
 
           <p className="text-gray-400 mt-2">
-            Select a hospital to draw route and open Google Maps live guidance.
+            Real hospitals only. Select one to draw route and open Google Maps guidance.
           </p>
 
           {loadingHospitals && (
             <p className="mt-5 text-yellow-400">
-              Searching nearby hospitals...
+              Searching real nearby hospitals...
             </p>
           )}
 
@@ -250,7 +276,9 @@ export default function MapView() {
           )}
 
           <button
-            onClick={() => fetchHospitals(position[0], position[1])}
+            onClick={() =>
+              fetchHospitals(position[0], position[1])
+            }
             className="mt-5 w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold"
           >
             Refresh Nearby Hospitals
@@ -282,6 +310,12 @@ export default function MapView() {
                 </button>
               </div>
             ))}
+
+            {!loadingHospitals && hospitals.length === 0 && (
+              <p className="text-gray-400 text-center">
+                No hospital data available yet.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -289,34 +323,9 @@ export default function MapView() {
   );
 }
 
-function getFallbackHospitals(lat, lng) {
-  return [
-    {
-      id: "fallback-1",
-      name: "Emergency Medical Center 1",
-      lat: lat + 0.01,
-      lon: lng + 0.01,
-      distance: getDistanceKm(lat, lng, lat + 0.01, lng + 0.01),
-    },
-    {
-      id: "fallback-2",
-      name: "Emergency Medical Center 2",
-      lat: lat - 0.012,
-      lon: lng + 0.008,
-      distance: getDistanceKm(lat, lng, lat - 0.012, lng + 0.008),
-    },
-    {
-      id: "fallback-3",
-      name: "Emergency Medical Center 3",
-      lat: lat + 0.008,
-      lon: lng - 0.012,
-      distance: getDistanceKm(lat, lng, lat + 0.008, lng - 0.012),
-    },
-  ];
-}
-
 function getDistanceKm(lat1, lon1, lat2, lon2) {
   const earthRadius = 6371;
+
   const dLat = degToRad(lat2 - lat1);
   const dLon = degToRad(lon2 - lon1);
 
