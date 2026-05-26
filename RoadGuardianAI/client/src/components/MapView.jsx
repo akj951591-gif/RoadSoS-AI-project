@@ -7,9 +7,22 @@ import {
   Marker,
   Popup,
   Polyline,
+  useMap,
 } from "react-leaflet";
 
 import "leaflet/dist/leaflet.css";
+
+function RecenterMap({ position }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, 15);
+    }
+  }, [position, map]);
+
+  return null;
+}
 
 export default function MapView() {
   const [position, setPosition] = useState(null);
@@ -17,17 +30,27 @@ export default function MapView() {
   const [route, setRoute] = useState([]);
   const [error, setError] = useState("");
   const [loadingHospitals, setLoadingHospitals] = useState(false);
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState(null);
 
   const API_KEY = import.meta.env.VITE_ORS_API_KEY;
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported.");
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
       (location) => {
         const lat = location.coords.latitude;
         const lng = location.coords.longitude;
 
         setPosition([lat, lng]);
-        fetchHospitals(lat, lng);
+
+        if (hospitals.length === 0) {
+          fetchHospitals(lat, lng);
+        }
       },
       () => {
         setError("Location permission denied. Please allow location access.");
@@ -38,7 +61,9 @@ export default function MapView() {
         maximumAge: 0,
       }
     );
-  }, []);
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [hospitals.length]);
 
   const fetchHospitals = async (lat, lng) => {
     setLoadingHospitals(true);
@@ -87,51 +112,75 @@ export default function MapView() {
 
       setHospitals(hospitalData.slice(0, 8));
 
-      if (hospitalData.length > 0) {
-        getRoute(lat, lng, hospitalData[0].lat, hospitalData[0].lon);
-      } else {
-        setError("No hospital found nearby. Try increasing search radius.");
+      if (hospitalData.length === 0) {
+        setError("No nearby hospital found.");
       }
     } catch (err) {
-      console.log(err);
-      setError("Hospital search failed on deployed site. Overpass API may be blocked or busy.");
+      console.log("HOSPITAL ERROR:", err);
+      setError("Hospital search failed. Try again later.");
     }
 
     setLoadingHospitals(false);
   };
 
   const getRoute = async (startLat, startLng, endLat, endLng) => {
+    setError("");
+    setRouteLoading(true);
+
     if (!API_KEY) {
-      setError("OpenRouteService API key missing in Vercel environment variables.");
+      setError("Route API key missing. Add VITE_ORS_API_KEY in Vercel.");
+      setRouteLoading(false);
       return;
     }
 
     try {
-      const response = await axios.get(
-        "https://api.openrouteservice.org/v2/directions/driving-car",
+      const response = await axios.post(
+        "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
         {
-          params: {
-            api_key: API_KEY,
-            start: `${startLng},${startLat}`,
-            end: `${endLng},${endLat}`,
+          coordinates: [
+            [startLng, startLat],
+            [endLng, endLat],
+          ],
+        },
+        {
+          headers: {
+            Authorization: API_KEY,
+            "Content-Type": "application/json",
           },
         }
       );
 
       const coords = response.data.features[0].geometry.coordinates;
-      const convertedCoords = coords.map((coord) => [coord[1], coord[0]]);
+
+      const convertedCoords = coords.map((coord) => [
+        coord[1],
+        coord[0],
+      ]);
 
       setRoute(convertedCoords);
     } catch (err) {
-      console.log(err);
-      setError("Route failed. Check VITE_ORS_API_KEY in Vercel.");
+      console.log("ROUTE ERROR:", err);
+      setError("Fastest route failed. Check OpenRouteService API key.");
     }
+
+    setRouteLoading(false);
+  };
+
+  const startLiveNavigation = (hospital) => {
+    setSelectedHospital(hospital);
+
+    getRoute(position[0], position[1], hospital.lat, hospital.lon);
+
+    window.open(
+      `https://www.google.com/maps/dir/?api=1&origin=${position[0]},${position[1]}&destination=${hospital.lat},${hospital.lon}&travelmode=driving`,
+      "_blank"
+    );
   };
 
   if (!position) {
     return (
       <div className="text-center py-20 text-3xl">
-        Loading Map...
+        Loading Live Map...
       </div>
     );
   }
@@ -139,7 +188,7 @@ export default function MapView() {
   return (
     <section className="py-10">
       <h1 className="text-5xl font-black text-center mb-8">
-        Nearest Hospital Route
+        Nearest Hospital & Live Navigation
       </h1>
 
       {error && (
@@ -155,20 +204,27 @@ export default function MapView() {
             zoom={14}
             className="h-[75vh] rounded-[2rem]"
           >
+            <RecenterMap position={position} />
+
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
             <Marker position={position}>
-              <Popup>Your Location</Popup>
+              <Popup>Your Live Location</Popup>
             </Marker>
 
-            {hospitals.map((hospital) => (
-              <Marker key={hospital.id} position={[hospital.lat, hospital.lon]}>
-                <Popup>{hospital.name}</Popup>
+            {hospitals.map((hospital, index) => (
+              <Marker
+                key={hospital.id}
+                position={[hospital.lat, hospital.lon]}
+              >
+                <Popup>
+                  {index + 1}. {hospital.name}
+                </Popup>
               </Marker>
             ))}
 
             {route.length > 0 && (
-              <Polyline positions={route} color="red" />
+              <Polyline positions={route} color="red" weight={5} />
             )}
           </MapContainer>
         </div>
@@ -178,15 +234,38 @@ export default function MapView() {
             Nearby Hospitals
           </h2>
 
+          <p className="text-gray-400 mt-2">
+            Select a hospital to draw route and open Google Maps live guidance.
+          </p>
+
           {loadingHospitals && (
-            <p className="mt-5 text-yellow-400">Searching hospitals...</p>
+            <p className="mt-5 text-yellow-400">
+              Searching nearby hospitals...
+            </p>
           )}
 
-          <div className="mt-6 space-y-4">
+          {routeLoading && (
+            <p className="mt-5 text-cyan-400">
+              Finding fastest route...
+            </p>
+          )}
+
+          <button
+            onClick={() => fetchHospitals(position[0], position[1])}
+            className="mt-5 w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold"
+          >
+            Refresh Nearby Hospitals
+          </button>
+
+          <div className="mt-6 space-y-4 max-h-[55vh] overflow-y-auto pr-2">
             {hospitals.map((hospital, index) => (
               <div
                 key={hospital.id}
-                className="bg-black/30 border border-white/10 rounded-2xl p-4"
+                className={`bg-black/30 border rounded-2xl p-4 ${
+                  selectedHospital?.id === hospital.id
+                    ? "border-cyan-400"
+                    : "border-white/10"
+                }`}
               >
                 <h3 className="text-lg font-bold">
                   {index + 1}. {hospital.name}
@@ -197,17 +276,10 @@ export default function MapView() {
                 </p>
 
                 <button
-                  onClick={() =>
-                    getRoute(
-                      position[0],
-                      position[1],
-                      hospital.lat,
-                      hospital.lon
-                    )
-                  }
+                  onClick={() => startLiveNavigation(hospital)}
                   className="mt-4 w-full py-3 bg-gradient-to-r from-violet-600 to-cyan-500 hover:from-violet-700 hover:to-cyan-600 rounded-xl font-bold"
                 >
-                  Show Fastest Route
+                  Start Live Navigation
                 </button>
               </div>
             ))}
