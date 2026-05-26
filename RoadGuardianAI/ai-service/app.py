@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+import os
+import uvicorn
 
 app = FastAPI()
 
@@ -48,3 +50,7 @@ def triage(data: TriageData):
         "priority": priority,
         "action": action
     }
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

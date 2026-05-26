@@ -24,6 +24,7 @@ export default function MapView() {
 
   const API_KEY =
     import.meta.env.VITE_ORS_API_KEY;
+    console.log("ORS KEY:", API_KEY);
 
   useEffect(() => {
 
