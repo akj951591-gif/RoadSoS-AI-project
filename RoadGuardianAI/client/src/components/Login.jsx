@@ -5,6 +5,7 @@ import {
   FaUserPlus,
   FaUserShield,
   FaKey,
+  FaPhone,
 } from "react-icons/fa";
 
 export default function Login({ onLogin }) {
@@ -15,6 +16,7 @@ export default function Login({ onLogin }) {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
     newPassword: "",
   });
@@ -32,13 +34,28 @@ export default function Login({ onLogin }) {
     e.preventDefault();
 
     // SIGN UP
+
     if (mode === "signup") {
+
+      if (
+        !form.phone ||
+        form.phone.replace(/\D/g, "").length < 10
+      ) {
+
+        alert(
+          "Please enter at least one valid emergency contact number."
+        );
+
+        return;
+      }
 
       localStorage.setItem(
         "roadsos_user",
+
         JSON.stringify({
           name: form.name,
           email: form.email,
+          phone: form.phone,
           password: form.password,
         })
       );
@@ -53,6 +70,7 @@ export default function Login({ onLogin }) {
     }
 
     // SIGN IN
+
     if (mode === "signin") {
 
       const savedUser =
@@ -89,6 +107,7 @@ export default function Login({ onLogin }) {
     }
 
     // CHANGE PASSWORD
+
     if (mode === "change") {
 
       const savedUser =
@@ -145,17 +164,30 @@ export default function Login({ onLogin }) {
       flex
       items-center
       justify-center
-      bg-[#030303]
+      bg-[#0B1020]
       text-white
       px-4
       "
     >
 
+      {/* BACKGROUND */}
+
+      <div
+        className="
+        fixed
+        inset-0
+        -z-10
+        bg-[radial-gradient(circle_at_top_left,#7C3AED55,transparent_35%),radial-gradient(circle_at_bottom_right,#06B6D455,transparent_35%)]
+        "
+      />
+
+      {/* CARD */}
+
       <div
         className="
         w-full
         max-w-md
-        bg-white/5
+        bg-[#111827]/70
         border
         border-white/10
         rounded-[2rem]
@@ -165,11 +197,13 @@ export default function Login({ onLogin }) {
         "
       >
 
+        {/* HEADER */}
+
         <div className="text-center">
 
           <FaUserShield
             className="
-            text-red-500
+            text-cyan-400
             text-6xl
             mx-auto
             "
@@ -183,10 +217,21 @@ export default function Login({ onLogin }) {
             "
           >
 
-            RoadSoS
-            <span className="text-red-500">
-              {" "}AI
+            <span
+              className="
+              bg-gradient-to-r
+              from-violet-400
+              to-cyan-400
+              bg-clip-text
+              text-transparent
+              "
+            >
+
+              RoadSoS
+
             </span>
+
+            {" "}AI
 
           </h1>
 
@@ -194,20 +239,28 @@ export default function Login({ onLogin }) {
 
             {
               mode === "signin"
-                ? "Sign in to emergency dashboard"
-                : mode === "signup"
-                ? "Create emergency account"
-                : "Change your password"
+
+              ? "Sign in to emergency dashboard"
+
+              : mode === "signup"
+
+              ? "Create emergency account"
+
+              : "Change your password"
             }
 
           </p>
 
         </div>
 
+        {/* FORM */}
+
         <form
           onSubmit={handleSubmit}
           className="mt-8 space-y-5"
         >
+
+          {/* FULL NAME */}
 
           {
             mode === "signup" && (
@@ -221,7 +274,9 @@ export default function Login({ onLogin }) {
                   font-bold
                   "
                 >
+
                   Full Name
+
                 </label>
 
                 <input
@@ -231,6 +286,7 @@ export default function Login({ onLogin }) {
                   value={form.name}
                   onChange={handleChange}
                   placeholder="Ayush Kumar"
+
                   className="
                   w-full
                   p-4
@@ -246,6 +302,77 @@ export default function Login({ onLogin }) {
             )
           }
 
+          {/* PHONE */}
+
+          {
+            mode === "signup" && (
+
+              <div>
+
+                <label
+                  className="
+                  block
+                  mb-2
+                  font-bold
+                  "
+                >
+
+                  Emergency Contact Number
+
+                </label>
+
+                <div className="relative">
+
+                  <FaPhone
+                    className="
+                    absolute
+                    left-4
+                    top-5
+                    text-cyan-400
+                    "
+                  />
+
+                  <input
+                    name="phone"
+                    type="tel"
+                    required
+                    value={form.phone}
+                    onChange={handleChange}
+                    placeholder="9876543210"
+
+                    className="
+                    w-full
+                    p-4
+                    pl-12
+                    rounded-xl
+                    bg-black/50
+                    border
+                    border-white/10
+                    outline-none
+                    "
+                  />
+
+                </div>
+
+                <p
+                  className="
+                  mt-2
+                  text-xs
+                  text-gray-400
+                  "
+                >
+
+                  This number will receive
+                  your live location during SOS.
+
+                </p>
+
+              </div>
+            )
+          }
+
+          {/* EMAIL */}
+
           <div>
 
             <label
@@ -255,7 +382,9 @@ export default function Login({ onLogin }) {
               font-bold
               "
             >
+
               Email
+
             </label>
 
             <input
@@ -265,6 +394,7 @@ export default function Login({ onLogin }) {
               value={form.email}
               onChange={handleChange}
               placeholder="user@example.com"
+
               className="
               w-full
               p-4
@@ -277,6 +407,8 @@ export default function Login({ onLogin }) {
             />
 
           </div>
+
+          {/* PASSWORD */}
 
           <div>
 
@@ -287,7 +419,15 @@ export default function Login({ onLogin }) {
               font-bold
               "
             >
-              Password
+
+              {
+                mode === "change"
+
+                ? "Current Password"
+
+                : "Password"
+              }
+
             </label>
 
             <input
@@ -297,6 +437,7 @@ export default function Login({ onLogin }) {
               value={form.password}
               onChange={handleChange}
               placeholder="••••••••"
+
               className="
               w-full
               p-4
@@ -309,6 +450,8 @@ export default function Login({ onLogin }) {
             />
 
           </div>
+
+          {/* NEW PASSWORD */}
 
           {
             mode === "change" && (
@@ -322,7 +465,9 @@ export default function Login({ onLogin }) {
                   font-bold
                   "
                 >
+
                   New Password
+
                 </label>
 
                 <input
@@ -332,6 +477,7 @@ export default function Login({ onLogin }) {
                   value={form.newPassword}
                   onChange={handleChange}
                   placeholder="New password"
+
                   className="
                   w-full
                   p-4
@@ -347,12 +493,17 @@ export default function Login({ onLogin }) {
             )
           }
 
+          {/* BUTTON */}
+
           <button
             className="
             w-full
             py-4
-            bg-red-600
-            hover:bg-red-700
+            bg-gradient-to-r
+            from-violet-600
+            to-cyan-500
+            hover:from-violet-700
+            hover:to-cyan-600
             rounded-xl
             font-bold
             text-lg
@@ -360,55 +511,75 @@ export default function Login({ onLogin }) {
             items-center
             justify-center
             gap-2
+            shadow-lg
+            shadow-violet-500/40
             "
           >
 
             {
               mode === "signin"
-                ? <FaLock />
-                : mode === "signup"
-                ? <FaUserPlus />
-                : <FaKey />
+
+              ? <FaLock />
+
+              : mode === "signup"
+
+              ? <FaUserPlus />
+
+              : <FaKey />
             }
 
             {
               mode === "signin"
-                ? "Sign In"
-                : mode === "signup"
-                ? "Sign Up"
-                : "Change Password"
+
+              ? "Sign In"
+
+              : mode === "signup"
+
+              ? "Sign Up"
+
+              : "Change Password"
             }
 
           </button>
 
         </form>
 
+        {/* LINKS */}
+
         <div className="mt-6 space-y-3">
 
           <button
-            onClick={() => setMode(
-              mode === "signin"
+            onClick={() =>
+              setMode(
+                mode === "signin"
+
                 ? "signup"
+
                 : "signin"
-            )}
+              )
+            }
+
             className="
             w-full
-            text-red-400
-            hover:text-red-300
+            text-cyan-400
+            hover:text-cyan-300
             font-bold
             "
           >
 
             {
               mode === "signin"
-                ? "New user? Create account"
-                : "Already have account? Sign in"
+
+              ? "New user? Create account"
+
+              : "Already have account? Sign in"
             }
 
           </button>
 
           <button
             onClick={() => setMode("change")}
+
             className="
             w-full
             text-yellow-400
@@ -416,7 +587,9 @@ export default function Login({ onLogin }) {
             font-bold
             "
           >
+
             Change Password
+
           </button>
 
         </div>

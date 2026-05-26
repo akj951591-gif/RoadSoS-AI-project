@@ -187,7 +187,7 @@ export default function MapView() {
 
   return (
     <section className="py-10">
-      <h1 className="text-5xl font-black text-center mb-8">
+      <h1 className="text-3xl md:text-5xl font-black text-center mb-8 mt-6">
         Nearest Hospital & Live Navigation
       </h1>
 
