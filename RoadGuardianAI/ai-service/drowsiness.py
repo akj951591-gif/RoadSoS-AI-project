@@ -2,9 +2,8 @@ import cv2
 import requests
 import time
 
-API_SAFE = "https://roadsos-driver-api.onrender.com/set-safe"
-API_DROWSY = "https://roadsos-driver-api.onrender.com/set-drowsy"
-
+API_SAFE = "https://roadsos-ai-project-2.onrender.com/set-safe"
+API_DROWSY = "https://roadsos-ai-project-2.onrender.com/set-drowsy"
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )

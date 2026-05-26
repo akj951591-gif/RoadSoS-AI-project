@@ -4,7 +4,7 @@ export default function DriverMonitor() {
   const [status, setStatus] = useState("LOADING");
   const [error, setError] = useState("");
 
-  const DRIVER_API = "https://roadsos-driver-api.onrender.com";
+  const DRIVER_API = "https://roadsos-ai-project-2.onrender.com";
 
   useEffect(() => {
     const fetchStatus = async () => {
