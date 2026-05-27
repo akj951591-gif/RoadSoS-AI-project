@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from passlib.hash import bcrypt
+import certifi
 import os
 import uvicorn
 
@@ -18,7 +19,13 @@ app.add_middleware(
 
 MONGO_URL = os.environ.get("MONGO_URL")
 
-client = MongoClient(MONGO_URL)
+client = MongoClient(
+    MONGO_URL,
+    tls=True,
+    tlsCAFile=certifi.where(),
+    serverSelectionTimeoutMS=30000,
+)
+
 db = client["roadsos_ai"]
 users_collection = db["users"]
 
