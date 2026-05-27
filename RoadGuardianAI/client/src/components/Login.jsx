@@ -9,9 +9,9 @@ import {
 } from "react-icons/fa";
 
 export default function Login({ onLogin }) {
+  const API_URL = "https://roadsos-ai-project.onrender.com";
 
-  const [mode, setMode] =
-    useState("signin");
+  const [mode, setMode] = useState("signin");
 
   const [form, setForm] = useState({
     name: "",
@@ -22,142 +22,108 @@ export default function Login({ onLogin }) {
   });
 
   const handleChange = (e) => {
-
     setForm({
       ...form,
       [e.target.name]: e.target.value,
     });
   };
 
-  const handleSubmit = (e) => {
-
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // SIGN UP
-
     if (mode === "signup") {
-
-      if (
-        !form.phone ||
-        form.phone.replace(/\D/g, "").length < 10
-      ) {
-
-        alert(
-          "Please enter at least one valid emergency contact number."
-        );
-
+      if (!form.phone || form.phone.replace(/\D/g, "").length < 10) {
+        alert("Please enter at least one valid emergency contact number.");
         return;
       }
 
-      localStorage.setItem(
-        "roadsos_user",
+      try {
+        const response = await fetch(`${API_URL}/signup`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            password: form.password,
+          }),
+        });
 
-        JSON.stringify({
-          name: form.name,
-          email: form.email,
-          phone: form.phone,
-          password: form.password,
-        })
-      );
+        const data = await response.json();
 
-      alert(
-        "Account created successfully."
-      );
+        alert(data.message);
 
-      setMode("signin");
+        if (data.success) {
+          setMode("signin");
+        }
+      } catch {
+        alert("Signup failed. Backend may be offline.");
+      }
 
       return;
     }
 
     // SIGN IN
-
     if (mode === "signin") {
+      try {
+        const response = await fetch(`${API_URL}/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: form.email,
+            password: form.password,
+          }),
+        });
 
-      const savedUser =
-        JSON.parse(
-          localStorage.getItem(
-            "roadsos_user"
-          )
-        );
+        const data = await response.json();
 
-      if (!savedUser) {
-
-        alert(
-          "No account found. Please sign up first."
-        );
-
-        return;
-      }
-
-      if (
-        savedUser.email === form.email &&
-        savedUser.password === form.password
-      ) {
-
-        onLogin(savedUser);
-
-      } else {
-
-        alert(
-          "Invalid email or password."
-        );
+        if (data.success) {
+          localStorage.setItem("roadsos_user", JSON.stringify(data.user));
+          onLogin(data.user);
+        } else {
+          alert(data.message);
+        }
+      } catch {
+        alert("Login failed. Backend may be offline.");
       }
 
       return;
     }
 
     // CHANGE PASSWORD
-
     if (mode === "change") {
+      try {
+        const response = await fetch(`${API_URL}/change-password`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: form.email,
+            old_password: form.password,
+            new_password: form.newPassword,
+          }),
+        });
 
-      const savedUser =
-        JSON.parse(
-          localStorage.getItem(
-            "roadsos_user"
-          )
-        );
+        const data = await response.json();
 
-      if (!savedUser) {
+        alert(data.message);
 
-        alert(
-          "No account found."
-        );
-
-        return;
-      }
-
-      if (
-        savedUser.email === form.email &&
-        savedUser.password === form.password
-      ) {
-
-        const updatedUser = {
-          ...savedUser,
-          password: form.newPassword,
-        };
-
-        localStorage.setItem(
-          "roadsos_user",
-          JSON.stringify(updatedUser)
-        );
-
-        alert(
-          "Password changed successfully."
-        );
-
-        setMode("signin");
-
-      } else {
-
-        alert(
-          "Current password incorrect."
-        );
+        if (data.success) {
+          setMode("signin");
+        }
+      } catch {
+        alert("Password change failed. Backend may be offline.");
       }
     }
   };
 
   return (
-
     <div
       className="
       min-h-screen
@@ -169,9 +135,6 @@ export default function Login({ onLogin }) {
       px-4
       "
     >
-
-      {/* BACKGROUND */}
-
       <div
         className="
         fixed
@@ -180,8 +143,6 @@ export default function Login({ onLogin }) {
         bg-[radial-gradient(circle_at_top_left,#7C3AED55,transparent_35%),radial-gradient(circle_at_bottom_right,#06B6D455,transparent_35%)]
         "
       />
-
-      {/* CARD */}
 
       <div
         className="
@@ -196,11 +157,7 @@ export default function Login({ onLogin }) {
         backdrop-blur-2xl
         "
       >
-
-        {/* HEADER */}
-
         <div className="text-center">
-
           <FaUserShield
             className="
             text-cyan-400
@@ -216,7 +173,6 @@ export default function Login({ onLogin }) {
             font-black
             "
           >
-
             <span
               className="
               bg-gradient-to-r
@@ -226,70 +182,86 @@ export default function Login({ onLogin }) {
               text-transparent
               "
             >
-
               RoadSoS
-
-            </span>
-
-            {" "}AI
-
+            </span>{" "}
+            AI
           </h1>
 
           <p className="mt-3 text-gray-400">
-
-            {
-              mode === "signin"
-
+            {mode === "signin"
               ? "Sign in to emergency dashboard"
-
               : mode === "signup"
-
               ? "Create emergency account"
-
-              : "Change your password"
-            }
-
+              : "Change your password"}
           </p>
-
         </div>
 
-        {/* FORM */}
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          {mode === "signup" && (
+            <div>
+              <label
+                className="
+                block
+                mb-2
+                font-bold
+                "
+              >
+                Full Name
+              </label>
 
-        <form
-          onSubmit={handleSubmit}
-          className="mt-8 space-y-5"
-        >
+              <input
+                name="name"
+                type="text"
+                required
+                value={form.name}
+                onChange={handleChange}
+                placeholder="Ayush Kumar"
+                className="
+                w-full
+                p-4
+                rounded-xl
+                bg-black/50
+                border
+                border-white/10
+                outline-none
+                "
+              />
+            </div>
+          )}
 
-          {/* FULL NAME */}
+          {mode === "signup" && (
+            <div>
+              <label
+                className="
+                block
+                mb-2
+                font-bold
+                "
+              >
+                Emergency Contact Number
+              </label>
 
-          {
-            mode === "signup" && (
-
-              <div>
-
-                <label
+              <div className="relative">
+                <FaPhone
                   className="
-                  block
-                  mb-2
-                  font-bold
+                  absolute
+                  left-4
+                  top-5
+                  text-cyan-400
                   "
-                >
-
-                  Full Name
-
-                </label>
+                />
 
                 <input
-                  name="name"
-                  type="text"
+                  name="phone"
+                  type="tel"
                   required
-                  value={form.name}
+                  value={form.phone}
                   onChange={handleChange}
-                  placeholder="Ayush Kumar"
-
+                  placeholder="9876543210"
                   className="
                   w-full
                   p-4
+                  pl-12
                   rounded-xl
                   bg-black/50
                   border
@@ -297,84 +269,21 @@ export default function Login({ onLogin }) {
                   outline-none
                   "
                 />
-
               </div>
-            )
-          }
 
-          {/* PHONE */}
-
-          {
-            mode === "signup" && (
-
-              <div>
-
-                <label
-                  className="
-                  block
-                  mb-2
-                  font-bold
-                  "
-                >
-
-                  Emergency Contact Number
-
-                </label>
-
-                <div className="relative">
-
-                  <FaPhone
-                    className="
-                    absolute
-                    left-4
-                    top-5
-                    text-cyan-400
-                    "
-                  />
-
-                  <input
-                    name="phone"
-                    type="tel"
-                    required
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="9876543210"
-
-                    className="
-                    w-full
-                    p-4
-                    pl-12
-                    rounded-xl
-                    bg-black/50
-                    border
-                    border-white/10
-                    outline-none
-                    "
-                  />
-
-                </div>
-
-                <p
-                  className="
-                  mt-2
-                  text-xs
-                  text-gray-400
-                  "
-                >
-
-                  This number will receive
-                  your live location during SOS.
-
-                </p>
-
-              </div>
-            )
-          }
-
-          {/* EMAIL */}
+              <p
+                className="
+                mt-2
+                text-xs
+                text-gray-400
+                "
+              >
+                This number will receive your live location during SOS.
+              </p>
+            </div>
+          )}
 
           <div>
-
             <label
               className="
               block
@@ -382,9 +291,7 @@ export default function Login({ onLogin }) {
               font-bold
               "
             >
-
               Email
-
             </label>
 
             <input
@@ -394,7 +301,6 @@ export default function Login({ onLogin }) {
               value={form.email}
               onChange={handleChange}
               placeholder="user@example.com"
-
               className="
               w-full
               p-4
@@ -405,13 +311,9 @@ export default function Login({ onLogin }) {
               outline-none
               "
             />
-
           </div>
 
-          {/* PASSWORD */}
-
           <div>
-
             <label
               className="
               block
@@ -419,15 +321,7 @@ export default function Login({ onLogin }) {
               font-bold
               "
             >
-
-              {
-                mode === "change"
-
-                ? "Current Password"
-
-                : "Password"
-              }
-
+              {mode === "change" ? "Current Password" : "Password"}
             </label>
 
             <input
@@ -437,7 +331,6 @@ export default function Login({ onLogin }) {
               value={form.password}
               onChange={handleChange}
               placeholder="••••••••"
-
               className="
               w-full
               p-4
@@ -448,52 +341,39 @@ export default function Login({ onLogin }) {
               outline-none
               "
             />
-
           </div>
 
-          {/* NEW PASSWORD */}
+          {mode === "change" && (
+            <div>
+              <label
+                className="
+                block
+                mb-2
+                font-bold
+                "
+              >
+                New Password
+              </label>
 
-          {
-            mode === "change" && (
-
-              <div>
-
-                <label
-                  className="
-                  block
-                  mb-2
-                  font-bold
-                  "
-                >
-
-                  New Password
-
-                </label>
-
-                <input
-                  name="newPassword"
-                  type="password"
-                  required
-                  value={form.newPassword}
-                  onChange={handleChange}
-                  placeholder="New password"
-
-                  className="
-                  w-full
-                  p-4
-                  rounded-xl
-                  bg-black/50
-                  border
-                  border-white/10
-                  outline-none
-                  "
-                />
-
-              </div>
-            )
-          }
-
-          {/* BUTTON */}
+              <input
+                name="newPassword"
+                type="password"
+                required
+                value={form.newPassword}
+                onChange={handleChange}
+                placeholder="New password"
+                className="
+                w-full
+                p-4
+                rounded-xl
+                bg-black/50
+                border
+                border-white/10
+                outline-none
+                "
+              />
+            </div>
+          )}
 
           <button
             className="
@@ -515,50 +395,31 @@ export default function Login({ onLogin }) {
             shadow-violet-500/40
             "
           >
+            {mode === "signin" ? (
+              <FaLock />
+            ) : mode === "signup" ? (
+              <FaUserPlus />
+            ) : (
+              <FaKey />
+            )}
 
-            {
-              mode === "signin"
-
-              ? <FaLock />
-
-              : mode === "signup"
-
-              ? <FaUserPlus />
-
-              : <FaKey />
-            }
-
-            {
-              mode === "signin"
-
+            {mode === "signin"
               ? "Sign In"
-
               : mode === "signup"
-
               ? "Sign Up"
-
-              : "Change Password"
-            }
-
+              : "Change Password"}
           </button>
-
         </form>
 
-        {/* LINKS */}
-
         <div className="mt-6 space-y-3">
-
           <button
             onClick={() =>
               setMode(
                 mode === "signin"
-
-                ? "signup"
-
-                : "signin"
+                  ? "signup"
+                  : "signin"
               )
             }
-
             className="
             w-full
             text-cyan-400
@@ -566,20 +427,13 @@ export default function Login({ onLogin }) {
             font-bold
             "
           >
-
-            {
-              mode === "signin"
-
+            {mode === "signin"
               ? "New user? Create account"
-
-              : "Already have account? Sign in"
-            }
-
+              : "Already have account? Sign in"}
           </button>
 
           <button
             onClick={() => setMode("change")}
-
             className="
             w-full
             text-yellow-400
@@ -587,15 +441,10 @@ export default function Login({ onLogin }) {
             font-bold
             "
           >
-
             Change Password
-
           </button>
-
         </div>
-
       </div>
-
     </div>
   );
 }
