@@ -1,11 +1,22 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import "./components/LeafletFix";
-import App from './App'
-import './index.css'
+import React from "react";
+import ReactDOM from "react-dom/client";
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+import "./components/LeafletFix";
+
+import App from "./App";
+
+import "./index.css";
+
+import { registerSW } from "virtual:pwa-register";
+
+registerSW({
+  immediate: true,
+});
+
+ReactDOM.createRoot(
+  document.getElementById("root")
+).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>,
-)
+  </React.StrictMode>
+);
