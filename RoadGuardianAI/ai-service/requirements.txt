@@ -5,3 +5,6 @@ flask
 flask-cors
 opencv-python
 requests
+pymongo
+passlib[bcrypt]
+python-dotenv

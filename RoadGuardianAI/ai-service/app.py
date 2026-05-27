@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
+from passlib.hash import bcrypt
 import os
 import uvicorn
 
@@ -14,6 +16,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+MONGO_URL = os.environ.get("MONGO_URL")
+
+client = MongoClient(MONGO_URL)
+db = client["roadsos_ai"]
+users_collection = db["users"]
+
+
 class TriageData(BaseModel):
     injury: float
     bleeding: float
@@ -21,9 +30,104 @@ class TriageData(BaseModel):
     breathing: float
     distance: float
 
+
+class UserSignup(BaseModel):
+    name: str
+    email: str
+    phone: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+
+class ChangePassword(BaseModel):
+    email: str
+    old_password: str
+    new_password: str
+
+
 @app.get("/")
 def home():
-    return {"message": "RoadSoS AI Triage Running"}
+    return {"message": "RoadSoS AI Backend Running"}
+
+
+@app.post("/signup")
+def signup(user: UserSignup):
+    existing = users_collection.find_one({"email": user.email})
+
+    if existing:
+        return {"success": False, "message": "User already exists"}
+
+    role = "admin" if user.email == "admin@roadsos.com" else "user"
+
+    users_collection.insert_one({
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "password": bcrypt.hash(user.password),
+        "role": role,
+    })
+
+    return {"success": True, "message": "Account created successfully"}
+
+
+@app.post("/login")
+def login(user: UserLogin):
+    existing = users_collection.find_one({"email": user.email})
+
+    if not existing:
+        return {"success": False, "message": "User not found"}
+
+    if not bcrypt.verify(user.password, existing["password"]):
+        return {"success": False, "message": "Invalid password"}
+
+    return {
+        "success": True,
+        "message": "Login successful",
+        "user": {
+            "name": existing["name"],
+            "email": existing["email"],
+            "phone": existing["phone"],
+            "role": existing.get("role", "user"),
+        },
+    }
+
+
+@app.post("/change-password")
+def change_password(data: ChangePassword):
+    existing = users_collection.find_one({"email": data.email})
+
+    if not existing:
+        return {"success": False, "message": "User not found"}
+
+    if not bcrypt.verify(data.old_password, existing["password"]):
+        return {"success": False, "message": "Old password incorrect"}
+
+    users_collection.update_one(
+        {"email": data.email},
+        {"$set": {"password": bcrypt.hash(data.new_password)}}
+    )
+
+    return {"success": True, "message": "Password changed successfully"}
+
+
+@app.get("/admin/users")
+def get_all_users():
+    users = []
+
+    for user in users_collection.find({}, {"password": 0}):
+        users.append({
+            "name": user.get("name"),
+            "email": user.get("email"),
+            "phone": user.get("phone"),
+            "role": user.get("role", "user"),
+        })
+
+    return {"users": users}
+
 
 @app.post("/triage")
 def triage(data: TriageData):
@@ -48,8 +152,9 @@ def triage(data: TriageData):
     return {
         "triage_score": round(score, 2),
         "priority": priority,
-        "action": action
+        "action": action,
     }
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
