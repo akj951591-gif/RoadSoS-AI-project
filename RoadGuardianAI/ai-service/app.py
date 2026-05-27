@@ -1,13 +1,14 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
-from passlib.hash import bcrypt
-import certifi
 import os
 import uvicorn
 
-app = FastAPI()
+app = FastAPI(
+    title="RoadSoS AI Backend",
+    description="AI emergency triage backend for RoadSoS AI project",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,123 +18,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MONGO_URL = os.environ.get("MONGO_URL")
-
-client = MongoClient(
-    MONGO_URL,
-    tls=True,
-    tlsCAFile=certifi.where(),
-    serverSelectionTimeoutMS=30000,
-)
-
-db = client["roadsos_ai"]
-users_collection = db["users"]
-
 
 class TriageData(BaseModel):
-    injury: float
-    bleeding: float
-    consciousness: float
-    breathing: float
-    distance: float
-
-
-class UserSignup(BaseModel):
-    name: str
-    email: str
-    phone: str
-    password: str
-
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-
-class ChangePassword(BaseModel):
-    email: str
-    old_password: str
-    new_password: str
+    injury: float = Field(..., ge=0, le=100)
+    bleeding: float = Field(..., ge=0, le=100)
+    consciousness: float = Field(..., ge=0, le=100)
+    breathing: float = Field(..., ge=0, le=100)
+    distance: float = Field(..., ge=0, le=100)
 
 
 @app.get("/")
 def home():
-    return {"message": "RoadSoS AI Backend Running"}
-
-
-@app.post("/signup")
-def signup(user: UserSignup):
-    existing = users_collection.find_one({"email": user.email})
-
-    if existing:
-        return {"success": False, "message": "User already exists"}
-
-    role = "admin" if user.email == "admin@roadsos.com" else "user"
-
-    users_collection.insert_one({
-        "name": user.name,
-        "email": user.email,
-        "phone": user.phone,
-        "password": bcrypt.hash(user.password),
-        "role": role,
-    })
-
-    return {"success": True, "message": "Account created successfully"}
-
-
-@app.post("/login")
-def login(user: UserLogin):
-    existing = users_collection.find_one({"email": user.email})
-
-    if not existing:
-        return {"success": False, "message": "User not found"}
-
-    if not bcrypt.verify(user.password, existing["password"]):
-        return {"success": False, "message": "Invalid password"}
-
     return {
         "success": True,
-        "message": "Login successful",
-        "user": {
-            "name": existing["name"],
-            "email": existing["email"],
-            "phone": existing["phone"],
-            "role": existing.get("role", "user"),
-        },
+        "message": "RoadSoS AI Backend Running",
+        "service": "AI Emergency Triage",
+        "status": "online",
+        "docs": "/docs",
     }
 
 
-@app.post("/change-password")
-def change_password(data: ChangePassword):
-    existing = users_collection.find_one({"email": data.email})
-
-    if not existing:
-        return {"success": False, "message": "User not found"}
-
-    if not bcrypt.verify(data.old_password, existing["password"]):
-        return {"success": False, "message": "Old password incorrect"}
-
-    users_collection.update_one(
-        {"email": data.email},
-        {"$set": {"password": bcrypt.hash(data.new_password)}}
-    )
-
-    return {"success": True, "message": "Password changed successfully"}
-
-
-@app.get("/admin/users")
-def get_all_users():
-    users = []
-
-    for user in users_collection.find({}, {"password": 0}):
-        users.append({
-            "name": user.get("name"),
-            "email": user.get("email"),
-            "phone": user.get("phone"),
-            "role": user.get("role", "user"),
-        })
-
-    return {"users": users}
+@app.get("/health")
+def health_check():
+    return {
+        "success": True,
+        "status": "healthy",
+        "message": "Backend is working properly",
+    }
 
 
 @app.post("/triage")
@@ -146,20 +57,76 @@ def triage(data: TriageData):
         data.distance * 0.10
     )
 
-    if score >= 75:
+    score = round(score, 2)
+
+    if score >= 80:
+        priority = "CRITICAL"
+        risk_level = "Extreme"
+        emergency = True
+        color = "red"
+        action = "Call ambulance immediately. Share live location and avoid moving the injured person unless there is danger."
+        advice = [
+            "Call emergency services immediately.",
+            "Keep the victim still and calm.",
+            "Check breathing and consciousness.",
+            "Share GPS location with emergency contact.",
+        ]
+
+    elif score >= 65:
         priority = "HIGH"
-        action = "Call ambulance immediately and share live location."
-    elif score >= 45:
+        risk_level = "Severe"
+        emergency = True
+        color = "orange"
+        action = "Emergency medical help is required urgently. Move to the nearest trauma center if ambulance is delayed."
+        advice = [
+            "Call ambulance as soon as possible.",
+            "Control bleeding with clean cloth if present.",
+            "Monitor breathing continuously.",
+            "Prepare to navigate to nearest hospital.",
+        ]
+
+    elif score >= 40:
         priority = "MEDIUM"
-        action = "Reach nearest trauma center as soon as possible."
+        risk_level = "Moderate"
+        emergency = False
+        color = "yellow"
+        action = "Medical attention is recommended. Visit the nearest hospital or clinic soon."
+        advice = [
+            "Visit a nearby medical center.",
+            "Keep monitoring the victim.",
+            "Avoid unnecessary movement.",
+            "Use map to locate nearby hospital.",
+        ]
+
     else:
         priority = "LOW"
-        action = "Monitor condition and seek medical advice."
+        risk_level = "Mild"
+        emergency = False
+        color = "green"
+        action = "Condition appears less severe. Continue monitoring and seek medical advice if symptoms increase."
+        advice = [
+            "Monitor symptoms carefully.",
+            "Keep emergency contact informed.",
+            "Visit clinic if pain or discomfort increases.",
+            "Stay hydrated and calm.",
+        ]
 
     return {
-        "triage_score": round(score, 2),
+        "success": True,
+        "triage_score": score,
         "priority": priority,
+        "risk_level": risk_level,
+        "emergency": emergency,
+        "color": color,
         "action": action,
+        "advice": advice,
+        "input_summary": {
+            "injury": data.injury,
+            "bleeding": data.bleeding,
+            "consciousness": data.consciousness,
+            "breathing": data.breathing,
+            "distance": data.distance,
+        },
     }
 
 

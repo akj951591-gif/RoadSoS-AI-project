@@ -5,8 +5,3 @@ flask
 flask-cors
 opencv-python
 requests
-pymongo[srv]==4.6.3
-dnspython==2.6.1
-passlib[bcrypt]
-python-dotenv
-certifi
