@@ -15,7 +15,7 @@ import {
 
 export default function SOSPanel() {
   const [active, setActive] = useState(false);
-  const [countdown, setCountdown] = useState(10);
+  const [countdown, setCountdown] = useState(5);
   const [location, setLocation] = useState(null);
   const [extraContacts, setExtraContacts] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -105,7 +105,7 @@ export default function SOSPanel() {
     if (active && countdown === 0) {
       triggerEmergency();
       setActive(false);
-      setCountdown(10);
+      setCountdown(5);
     }
 
     return () => clearTimeout(timer);
@@ -128,7 +128,6 @@ export default function SOSPanel() {
       setImpactValue(totalForce.toFixed(2));
 
       if (totalForce > 35 && !active) {
-        alert("Possible crash detected. Starting SOS countdown.");
         startSOS();
       }
     };
@@ -181,6 +180,7 @@ export default function SOSPanel() {
     }
 
     if (!active) {
+      setCountdown(5);
       setActive(true);
 
       if (audioRef.current) {
@@ -191,7 +191,7 @@ export default function SOSPanel() {
 
   const cancelSOS = () => {
     setActive(false);
-    setCountdown(10);
+    setCountdown(5);
 
     if (audioRef.current) {
       audioRef.current.pause();
@@ -216,20 +216,23 @@ export default function SOSPanel() {
           `https://maps.google.com/?q=${liveLocation.lat},${liveLocation.lng}\n\n` +
           `Please contact emergency services immediately.`;
 
-        const firstContact = allContacts[0];
+        allContacts.forEach((contact, index) => {
+          const phone = cleanPhone(contact.phone);
 
-        window.location.href = `sms:${cleanPhone(
-          firstContact.phone
-        )}?body=${encodeURIComponent(message)}`;
+          setTimeout(() => {
+            window.open(
+              `sms:${phone}?body=${encodeURIComponent(message)}`,
+              "_blank"
+            );
+          }, index * 1200);
 
-        setTimeout(() => {
-          window.open(
-            `https://wa.me/${cleanPhone(
-              firstContact.phone
-            )}?text=${encodeURIComponent(message)}`,
-            "_blank"
-          );
-        }, 2000);
+          setTimeout(() => {
+            window.open(
+              `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+              "_blank"
+            );
+          }, index * 1200 + 600);
+        });
       },
       () => {
         alert("Location permission denied.");
