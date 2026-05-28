@@ -6,8 +6,8 @@ import uvicorn
 
 app = FastAPI(
     title="RoadSoS AI Backend",
-    description="AI emergency triage backend for RoadSoS AI project",
-    version="1.0.0",
+    description="AI backend for emergency triage and accident risk prediction",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -27,12 +27,22 @@ class TriageData(BaseModel):
     distance: float = Field(..., ge=0, le=100)
 
 
+class RiskData(BaseModel):
+    speed: float = Field(..., ge=0, le=150)
+    vibration: float = Field(..., ge=0, le=100)
+    weather: float = Field(..., ge=0, le=100)
+    driver_condition: float = Field(..., ge=0, le=100)
+
+
 @app.get("/")
 def home():
     return {
         "success": True,
         "message": "RoadSoS AI Backend Running",
-        "service": "AI Emergency Triage",
+        "services": [
+            "AI Emergency Triage",
+            "AI Accident Risk Prediction",
+        ],
         "status": "online",
         "docs": "/docs",
     }
@@ -50,11 +60,11 @@ def health_check():
 @app.post("/triage")
 def triage(data: TriageData):
     score = (
-        data.injury * 0.25 +
-        data.bleeding * 0.25 +
-        data.consciousness * 0.20 +
-        data.breathing * 0.20 +
-        data.distance * 0.10
+        data.injury * 0.25
+        + data.bleeding * 0.25
+        + data.consciousness * 0.20
+        + data.breathing * 0.20
+        + data.distance * 0.10
     )
 
     score = round(score, 2)
@@ -64,7 +74,10 @@ def triage(data: TriageData):
         risk_level = "Extreme"
         emergency = True
         color = "red"
-        action = "Call ambulance immediately. Share live location and avoid moving the injured person unless there is danger."
+        action = (
+            "Call ambulance immediately. Share live location and avoid "
+            "moving the injured person unless there is danger."
+        )
         advice = [
             "Call emergency services immediately.",
             "Keep the victim still and calm.",
@@ -77,7 +90,10 @@ def triage(data: TriageData):
         risk_level = "Severe"
         emergency = True
         color = "orange"
-        action = "Emergency medical help is required urgently. Move to the nearest trauma center if ambulance is delayed."
+        action = (
+            "Emergency medical help is required urgently. Move to the "
+            "nearest trauma center if ambulance is delayed."
+        )
         advice = [
             "Call ambulance as soon as possible.",
             "Control bleeding with clean cloth if present.",
@@ -90,7 +106,10 @@ def triage(data: TriageData):
         risk_level = "Moderate"
         emergency = False
         color = "yellow"
-        action = "Medical attention is recommended. Visit the nearest hospital or clinic soon."
+        action = (
+            "Medical attention is recommended. Visit the nearest hospital "
+            "or clinic soon."
+        )
         advice = [
             "Visit a nearby medical center.",
             "Keep monitoring the victim.",
@@ -103,7 +122,10 @@ def triage(data: TriageData):
         risk_level = "Mild"
         emergency = False
         color = "green"
-        action = "Condition appears less severe. Continue monitoring and seek medical advice if symptoms increase."
+        action = (
+            "Condition appears less severe. Continue monitoring and seek "
+            "medical advice if symptoms increase."
+        )
         advice = [
             "Monitor symptoms carefully.",
             "Keep emergency contact informed.",
@@ -120,13 +142,59 @@ def triage(data: TriageData):
         "color": color,
         "action": action,
         "advice": advice,
-        "input_summary": {
-            "injury": data.injury,
-            "bleeding": data.bleeding,
-            "consciousness": data.consciousness,
-            "breathing": data.breathing,
-            "distance": data.distance,
-        },
+        "input_summary": data.model_dump(),
+    }
+
+
+@app.post("/predict")
+def predict_risk(data: RiskData):
+    score = (
+        data.speed * 0.35
+        + data.vibration * 0.25
+        + data.weather * 0.20
+        + data.driver_condition * 0.20
+    )
+
+    score = round(score, 2)
+
+    if score >= 85:
+        accident_risk = "CRITICAL"
+        severity = "Extreme"
+        emergency = True
+        color = "red"
+        action = "Very high accident risk. Slow down immediately and stop at a safe place."
+
+    elif score >= 65:
+        accident_risk = "HIGH"
+        severity = "Severe"
+        emergency = True
+        color = "orange"
+        action = "High accident risk. Reduce speed and increase attention."
+
+    elif score >= 40:
+        accident_risk = "MEDIUM"
+        severity = "Moderate"
+        emergency = False
+        color = "yellow"
+        action = "Moderate risk. Drive carefully and monitor road conditions."
+
+    else:
+        accident_risk = "LOW"
+        severity = "Low"
+        emergency = False
+        color = "green"
+        action = "Low risk. Continue driving safely."
+
+    return {
+        "success": True,
+        "risk_score": score,
+        "accident_risk": accident_risk,
+        "severity": severity,
+        "emergency": emergency,
+        "color": color,
+        "action": action,
+        "message": "AI accident risk analysis completed",
+        "input_summary": data.model_dump(),
     }
 
 

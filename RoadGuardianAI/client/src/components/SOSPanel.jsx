@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-
 import {
   FaPhoneAlt,
   FaWhatsapp,
@@ -22,12 +21,12 @@ export default function SOSPanel() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [crashDetection, setCrashDetection] = useState(false);
   const [impactValue, setImpactValue] = useState(0);
+  const [sendLinks, setSendLinks] = useState([]);
 
   const audioRef = useRef(null);
   const recognitionRef = useRef(null);
 
-  const savedUser =
-    JSON.parse(localStorage.getItem("roadsos_user")) || {};
+  const savedUser = JSON.parse(localStorage.getItem("roadsos_user")) || {};
 
   useEffect(() => {
     const savedExtra =
@@ -42,9 +41,7 @@ export default function SOSPanel() {
           lng: pos.coords.longitude,
         });
       },
-      () => {
-        console.log("Location permission denied");
-      },
+      () => console.log("Location permission denied"),
       {
         enableHighAccuracy: true,
         timeout: 15000,
@@ -53,14 +50,186 @@ export default function SOSPanel() {
     );
   }, []);
 
+  const cleanPhone = (phone) => {
+    let cleaned = String(phone || "").replace(/\D/g, "");
+
+    if (cleaned.length === 10) {
+      cleaned = `91${cleaned}`;
+    }
+
+    return cleaned;
+  };
+
+  const primaryContact = savedUser?.phone
+    ? [
+        {
+          name: savedUser?.name || "Primary Contact",
+          phone: savedUser.phone,
+        },
+      ]
+    : [];
+
+  const allContacts = [...primaryContact, ...extraContacts];
+
+  const getEmergencyMessage = (customLocation = location) => {
+    const lat = customLocation?.lat || "Location not available";
+    const lng = customLocation?.lng || "";
+
+    return (
+      `🚨 RoadSoS Emergency Alert 🚨\n\n` +
+      `${savedUser?.name || "User"} needs immediate help.\n\n` +
+      `📍 Live Location:\n` +
+      `${customLocation ? `https://maps.google.com/?q=${lat},${lng}` : "Location permission not available"}\n\n` +
+      `Please contact emergency services immediately.`
+    );
+  };
+
+  const addContact = () => {
+    const name = prompt("Enter contact name:");
+    const phone = prompt("Enter emergency phone number:");
+
+    if (!name || !phone) return;
+
+    const cleanedPhone = cleanPhone(phone);
+
+    if (cleanedPhone.length < 10) {
+      alert("Enter valid phone number.");
+      return;
+    }
+
+    const alreadyExists = allContacts.some(
+      (contact) => cleanPhone(contact.phone) === cleanedPhone
+    );
+
+    if (alreadyExists) {
+      alert("This emergency number is already added.");
+      return;
+    }
+
+    const updated = [
+      ...extraContacts,
+      {
+        name,
+        phone: cleanedPhone,
+      },
+    ];
+
+    setExtraContacts(updated);
+    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
+
+    alert("Emergency contact added successfully.");
+  };
+
+  const removeContact = (extraIndex) => {
+    const updated = extraContacts.filter((_, i) => i !== extraIndex);
+
+    setExtraContacts(updated);
+    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
+  };
+
+  const startSOS = () => {
+    if (allContacts.length === 0) {
+      alert("No emergency contact found. Please add emergency number first.");
+      return;
+    }
+
+    setSendLinks([]);
+    setCountdown(5);
+    setActive(true);
+
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => {});
+    }
+  };
+
+  const cancelSOS = () => {
+    setActive(false);
+    setCountdown(5);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
+  const triggerEmergency = () => {
+    const sendAlert = (liveLocation) => {
+      const message = getEmergencyMessage(liveLocation);
+
+      const links = allContacts.map((contact) => {
+        const phone = cleanPhone(contact.phone);
+
+        return {
+          name: contact.name,
+          phone,
+          sms: `sms:${phone}?body=${encodeURIComponent(message)}`,
+          whatsapp: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+        };
+      });
+
+      setSendLinks(links);
+
+      links.forEach((item, index) => {
+        setTimeout(() => {
+          window.open(item.sms, "_blank");
+        }, index * 1500);
+
+        setTimeout(() => {
+          window.open(item.whatsapp, "_blank");
+        }, index * 1500 + 700);
+      });
+
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const liveLocation = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        };
+
+        setLocation(liveLocation);
+        sendAlert(liveLocation);
+      },
+      () => {
+        alert("Location permission denied. Sending alert without location.");
+        sendAlert(null);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      }
+    );
+  };
+
+  useEffect(() => {
+    let timer;
+
+    if (active && countdown > 0) {
+      timer = setTimeout(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+
+    if (active && countdown === 0) {
+      triggerEmergency();
+      setActive(false);
+      setCountdown(5);
+    }
+
+    return () => clearTimeout(timer);
+  }, [active, countdown]);
+
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) {
-      console.log("Voice recognition not supported");
-      return;
-    }
+    if (!SpeechRecognition) return;
 
     const recognition = new SpeechRecognition();
 
@@ -82,208 +251,11 @@ export default function SOSPanel() {
       }
     };
 
-    recognition.onerror = () => {
-      setVoiceActive(false);
-    };
-
-    recognition.onend = () => {
-      setVoiceActive(false);
-    };
+    recognition.onerror = () => setVoiceActive(false);
+    recognition.onend = () => setVoiceActive(false);
 
     recognitionRef.current = recognition;
-  }, []);
-
-  useEffect(() => {
-    let timer;
-
-    if (active && countdown > 0) {
-      timer = setTimeout(() => {
-        setCountdown(countdown - 1);
-      }, 1000);
-    }
-
-    if (active && countdown === 0) {
-      triggerEmergency();
-      setActive(false);
-      setCountdown(5);
-    }
-
-    return () => clearTimeout(timer);
-  }, [active, countdown]);
-
-  useEffect(() => {
-    if (!crashDetection) return;
-
-    const handleMotion = (event) => {
-      const acc = event.accelerationIncludingGravity;
-
-      if (!acc) return;
-
-      const totalForce = Math.sqrt(
-        (acc.x || 0) ** 2 +
-          (acc.y || 0) ** 2 +
-          (acc.z || 0) ** 2
-      );
-
-      setImpactValue(totalForce.toFixed(2));
-
-      if (totalForce > 35 && !active) {
-        startSOS();
-      }
-    };
-
-    window.addEventListener("devicemotion", handleMotion);
-
-    return () => {
-      window.removeEventListener("devicemotion", handleMotion);
-    };
-  }, [crashDetection, active]);
-
-  const primaryContact = savedUser?.phone
-    ? [
-        {
-          name: "Primary Contact",
-          phone: savedUser.phone,
-        },
-      ]
-    : [];
-
-  const allContacts = [...primaryContact, ...extraContacts];
-
-  const cleanPhone = (phone) => {
-    const cleaned = String(phone || "").replace(/\D/g, "");
-
-    if (cleaned.startsWith("91")) {
-      return cleaned;
-    }
-
-    return `91${cleaned}`;
-  };
-
-  const getEmergencyMessage = () => {
-    const lat = location?.lat;
-    const lng = location?.lng;
-
-    return (
-      `🚨 RoadSoS Emergency Alert 🚨\n\n` +
-      `${savedUser?.name || "User"} may be in danger or involved in an accident.\n\n` +
-      `📍 Live Location:\n` +
-      `https://maps.google.com/?q=${lat},${lng}\n\n` +
-      `Please contact emergency services immediately.`
-    );
-  };
-
-  const startSOS = () => {
-    if (allContacts.length === 0) {
-      alert("No emergency contact found.");
-      return;
-    }
-
-    if (!active) {
-      setCountdown(5);
-      setActive(true);
-
-      if (audioRef.current) {
-        audioRef.current.play();
-      }
-    }
-  };
-
-  const cancelSOS = () => {
-    setActive(false);
-    setCountdown(5);
-
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-  };
-
-  const triggerEmergency = () => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const liveLocation = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-
-        setLocation(liveLocation);
-
-        const message =
-          `🚨 RoadSoS Emergency Alert 🚨\n\n` +
-          `${savedUser?.name || "User"} needs immediate help.\n\n` +
-          `📍 Live Location:\n` +
-          `https://maps.google.com/?q=${liveLocation.lat},${liveLocation.lng}\n\n` +
-          `Please contact emergency services immediately.`;
-
-        allContacts.forEach((contact, index) => {
-          const phone = cleanPhone(contact.phone);
-
-          setTimeout(() => {
-            window.open(
-              `sms:${phone}?body=${encodeURIComponent(message)}`,
-              "_blank"
-            );
-          }, index * 1200);
-
-          setTimeout(() => {
-            window.open(
-              `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
-              "_blank"
-            );
-          }, index * 1200 + 600);
-        });
-      },
-      () => {
-        alert("Location permission denied.");
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
-    );
-  };
-
-  const addContact = () => {
-    const name = prompt("Enter contact name:");
-    const phone = prompt("Enter emergency phone number:");
-
-    if (!name || !phone) return;
-
-    if (phone.replace(/\D/g, "").length < 10) {
-      alert("Enter valid phone number.");
-      return;
-    }
-
-    const updated = [
-      ...extraContacts,
-      {
-        name,
-        phone,
-      },
-    ];
-
-    setExtraContacts(updated);
-    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
-  };
-
-  const removeContact = (index) => {
-    const updated = extraContacts.filter((_, i) => i !== index);
-
-    setExtraContacts(updated);
-    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
-  };
-
-  const copyMessage = async () => {
-    await navigator.clipboard.writeText(getEmergencyMessage());
-
-    setCopied(true);
-
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
-  };
+  }, [allContacts]);
 
   const startVoiceSOS = () => {
     if (!recognitionRef.current) {
@@ -307,6 +279,40 @@ export default function SOSPanel() {
     setVoiceActive(false);
   };
 
+  useEffect(() => {
+    if (!crashDetection) return;
+
+    const handleMotion = (event) => {
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+
+      const totalForce = Math.sqrt(
+        (acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2
+      );
+
+      setImpactValue(totalForce.toFixed(2));
+
+      if (totalForce > 35 && !active) {
+        startSOS();
+      }
+    };
+
+    window.addEventListener("devicemotion", handleMotion);
+
+    return () => {
+      window.removeEventListener("devicemotion", handleMotion);
+    };
+  }, [crashDetection, active, allContacts]);
+
+  const copyMessage = async () => {
+    await navigator.clipboard.writeText(getEmergencyMessage());
+    setCopied(true);
+
+    setTimeout(() => {
+      setCopied(false);
+    }, 2000);
+  };
+
   return (
     <section className="min-h-[75vh] py-10 flex items-center justify-center">
       <audio
@@ -326,7 +332,8 @@ export default function SOSPanel() {
           </h1>
 
           <p className="mt-4 text-gray-400 text-lg">
-            Voice SOS, crash detection, SMS, WhatsApp and live GPS emergency alert.
+            Voice SOS, crash detection, SMS, WhatsApp and live GPS emergency
+            alert.
           </p>
         </div>
 
@@ -353,7 +360,7 @@ export default function SOSPanel() {
             </div>
 
             <p className="mt-4 text-gray-400 text-xl">
-              Sending emergency alert...
+              Sending emergency alert to all emergency contacts...
             </p>
 
             <button
@@ -371,6 +378,48 @@ export default function SOSPanel() {
             >
               SOS
             </button>
+          </div>
+        )}
+
+        {sendLinks.length > 0 && (
+          <div className="mt-10 bg-red-500/10 border border-red-500/30 rounded-3xl p-6">
+            <h2 className="text-2xl font-black text-red-400 mb-4">
+              Emergency Alert Links
+            </h2>
+
+            <p className="text-gray-400 mb-5">
+              If browser blocked auto send, tap below buttons manually.
+            </p>
+
+            <div className="space-y-4">
+              {sendLinks.map((item, index) => (
+                <div
+                  key={index}
+                  className="bg-black/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div>
+                    <h3 className="font-bold text-xl">{item.name}</h3>
+                    <p className="text-gray-400">{item.phone}</p>
+                  </div>
+
+                  <div className="flex gap-3 flex-wrap">
+                    <a href={item.sms}>
+                      <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
+                        <FaSms />
+                        Send SMS
+                      </button>
+                    </a>
+
+                    <a href={item.whatsapp} target="_blank" rel="noreferrer">
+                      <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
+                        <FaWhatsapp />
+                        Send WhatsApp
+                      </button>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -412,16 +461,12 @@ export default function SOSPanel() {
               }`}
             >
               <FaCarCrash />
-              {crashDetection
-                ? "Stop Crash Detection"
-                : "Start Crash Detection"}
+              {crashDetection ? "Stop Crash Detection" : "Start Crash Detection"}
             </button>
 
             <p className="mt-4 text-gray-400">
               Impact Force:{" "}
-              <span className="text-cyan-400 font-bold">
-                {impactValue}
-              </span>
+              <span className="text-cyan-400 font-bold">{impactValue}</span>
             </p>
           </div>
         </div>

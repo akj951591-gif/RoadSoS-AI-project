@@ -8,6 +8,7 @@ import {
   FaHospital,
   FaCarCrash,
   FaSignOutAlt,
+  FaShieldAlt,
 } from "react-icons/fa";
 
 import Login from "./components/Login";
@@ -16,7 +17,9 @@ import SOSPanel from "./components/SOSPanel";
 import NearbyHelp from "./components/NearbyHelp";
 import MapView from "./components/MapView";
 import AITriage from "./components/AITriage";
+import AIPanel from "./components/AIPanel";
 import DriverMonitor from "./components/DriverMonitor";
+import GoogleTranslate from "./components/GoogleTranslate";
 
 const tabs = [
   {
@@ -37,6 +40,11 @@ const tabs = [
   {
     name: "Map",
     icon: <FaMapMarkedAlt />,
+  },
+
+  {
+    name: "AI Risk",
+    icon: <FaShieldAlt />,
   },
 
   {
@@ -120,6 +128,11 @@ function App() {
     if (activeTab === "Map") {
 
       return <MapView />;
+    }
+
+    if (activeTab === "AI Risk") {
+
+      return <AIPanel />;
     }
 
     if (activeTab === "AI Triage") {
@@ -233,6 +246,10 @@ function App() {
               gap-3
               "
             >
+
+              {/* GOOGLE TRANSLATE */}
+
+              <GoogleTranslate />
 
               {/* TABS */}
 
