@@ -1,0 +1,30 @@
+from flask import Flask, jsonify
+from flask_cors import CORS
+import os
+
+app = Flask(__name__)
+CORS(app)
+
+driver_status = {"status": "SAFE"}
+
+@app.route("/")
+def home():
+    return jsonify({"message": "RoadSoS Driver API Running"})
+
+@app.route("/driver-status")
+def get_driver_status():
+    return jsonify(driver_status)
+
+@app.route("/set-safe")
+def set_safe():
+    driver_status["status"] = "SAFE"
+    return jsonify(driver_status)
+
+@app.route("/set-drowsy")
+def set_drowsy():
+    driver_status["status"] = "DROWSY"
+    return jsonify(driver_status)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)

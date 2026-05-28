@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  background: #09090b;
+  color: white;
+  font-family: sans-serif;
+  top: 0 !important;
+}
+
+/* GOOGLE TRANSLATE FIX */
+
+.goog-te-banner-frame.skiptranslate {
+  display: none !important;
+}
+
+iframe.goog-te-banner-frame {
+  display: none !important;
+}
+
+body {
+  top: 0 !important;
+}
+
+.goog-logo-link,
+.goog-te-gadget span {
+  display: none !important;
+}
+
+.goog-te-gadget {
+  color: transparent !important;
+  font-size: 0;
+}
+
+.goog-te-combo {
+  background: #111827;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px;
+  border-radius: 12px;
+  outline: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+/* REMOVE BLUE HIGHLIGHT */
+
+.goog-text-highlight {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* HIDE TOP GOOGLE BAR */
+
+#goog-gt-tt,
+.goog-te-balloon-frame {
+  display: none !important;
+}
