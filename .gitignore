@@ -1,0 +1,48 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Render
+.render/
+
+# Vercel
+.vercel/
+
+# Models
+*.pkl
+*.joblib
+
+# Large datasets
+*.csv
+data/
+datasets/
+
+# Media
+*.mp4
+*.zip
