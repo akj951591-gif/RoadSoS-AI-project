@@ -17,11 +17,11 @@ export default function SOSPanel() {
   const [countdown, setCountdown] = useState(5);
   const [location, setLocation] = useState(null);
   const [extraContacts, setExtraContacts] = useState([]);
+  const [sendLinks, setSendLinks] = useState([]);
   const [copied, setCopied] = useState(false);
   const [voiceActive, setVoiceActive] = useState(false);
   const [crashDetection, setCrashDetection] = useState(false);
   const [impactValue, setImpactValue] = useState(0);
-  const [sendLinks, setSendLinks] = useState([]);
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
@@ -76,11 +76,8 @@ export default function SOSPanel() {
   const allContacts = [...primaryContact, ...extraContacts];
 
   const getEmergencyMessage = (customLocation = location) => {
-    const lat = customLocation?.lat || "Location not available";
-    const lng = customLocation?.lng || "";
-
     const locationText = customLocation
-      ? `https://maps.google.com/?q=${lat},${lng}`
+      ? `https://maps.google.com/?q=${customLocation.lat},${customLocation.lng}`
       : "Location permission not available";
 
     return (
@@ -111,16 +108,16 @@ export default function SOSPanel() {
     const cleanedPhone = cleanPhone(contactPhone);
 
     if (cleanedPhone.length < 10) {
-      alert("Enter valid emergency phone number.");
+      alert("Enter valid phone number.");
       return;
     }
 
-    const alreadyExists = allContacts.some(
-      (contact) => cleanPhone(contact.phone) === cleanedPhone
+    const exists = allContacts.some(
+      (c) => cleanPhone(c.phone) === cleanedPhone
     );
 
-    if (alreadyExists) {
-      alert("This emergency number is already added.");
+    if (exists) {
+      alert("This number is already added.");
       return;
     }
 
@@ -137,76 +134,77 @@ export default function SOSPanel() {
 
     setContactName("");
     setContactPhone("");
-
-    alert("Emergency contact added successfully.");
   };
 
-  const removeContact = (extraIndex) => {
-    const updated = extraContacts.filter((_, i) => i !== extraIndex);
+  const removeContact = (index) => {
+    const updated = extraContacts.filter((_, i) => i !== index);
     setExtraContacts(updated);
     localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
   };
 
-  const startSOS = () => {
-    if (allContacts.length === 0) {
-      alert("No emergency contact found. Please add emergency number first.");
-      return;
-    }
-
-    setSendLinks([]);
-    setCountdown(5);
-    setActive(true);
-
+  const startAlarm = () => {
     if (audioRef.current) {
+      audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {});
     }
   };
 
-  const cancelSOS = () => {
-    setActive(false);
-    setCountdown(5);
-
+  const stopAlarm = () => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
   };
 
+  const startSOS = () => {
+    if (allContacts.length === 0) {
+      alert("Please add at least one emergency contact.");
+      return;
+    }
+
+    setSendLinks([]);
+    setCountdown(5);
+    setActive(true);
+    startAlarm();
+  };
+
+  const cancelSOS = () => {
+    setActive(false);
+    setCountdown(5);
+    stopAlarm();
+  };
+
+  const openEmergencyLinks = (liveLocation) => {
+    const message = getEmergencyMessage(liveLocation);
+
+    const links = allContacts.map((contact) => {
+      const phone = cleanPhone(contact.phone);
+
+      return {
+        name: contact.name,
+        phone,
+        call: `tel:${phone}`,
+        sms: `sms:${phone}?body=${encodeURIComponent(message)}`,
+        whatsapp: `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
+      };
+    });
+
+    setSendLinks(links);
+
+    links.forEach((item, index) => {
+      setTimeout(() => {
+        window.location.href = item.sms;
+      }, index * 2500);
+
+      setTimeout(() => {
+        window.open(item.whatsapp, "_blank");
+      }, index * 2500 + 1000);
+    });
+
+    stopAlarm();
+  };
+
   const triggerEmergency = () => {
-    const sendAlert = (liveLocation) => {
-      const message = getEmergencyMessage(liveLocation);
-
-      const links = allContacts.map((contact) => {
-        const phone = cleanPhone(contact.phone);
-
-        return {
-          name: contact.name,
-          phone,
-          sms: `sms:${phone}?body=${encodeURIComponent(message)}`,
-          whatsapp: `https://wa.me/${phone}?text=${encodeURIComponent(
-            message
-          )}`,
-        };
-      });
-
-      setSendLinks(links);
-
-      links.forEach((item, index) => {
-        setTimeout(() => {
-          window.open(item.sms, "_blank");
-        }, index * 1500);
-
-        setTimeout(() => {
-          window.open(item.whatsapp, "_blank");
-        }, index * 1500 + 700);
-      });
-
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
-    };
-
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const liveLocation = {
@@ -215,11 +213,11 @@ export default function SOSPanel() {
         };
 
         setLocation(liveLocation);
-        sendAlert(liveLocation);
+        openEmergencyLinks(liveLocation);
       },
       () => {
-        alert("Location permission denied. Sending alert without location.");
-        sendAlert(null);
+        alert("Location permission denied. Sending message without location.");
+        openEmergencyLinks(null);
       },
       {
         enableHighAccuracy: true,
@@ -256,12 +254,22 @@ export default function SOSPanel() {
     const recognition = new SpeechRecognition();
 
     recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
-    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      setVoiceActive(true);
+      console.log("Voice SOS started");
+    };
 
     recognition.onresult = (event) => {
-      const transcript =
-        event.results[event.results.length - 1][0].transcript.toLowerCase();
+      let transcript = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript.toLowerCase();
+      }
+
+      console.log("Heard:", transcript);
 
       if (
         transcript.includes("help") ||
@@ -269,27 +277,42 @@ export default function SOSPanel() {
         transcript.includes("save me") ||
         transcript.includes("sos")
       ) {
+        recognition.stop();
+        setVoiceActive(false);
         startSOS();
       }
     };
 
-    recognition.onerror = () => setVoiceActive(false);
-    recognition.onend = () => setVoiceActive(false);
+    recognition.onerror = (event) => {
+      console.log("Voice error:", event.error);
+      setVoiceActive(false);
+
+      if (event.error === "not-allowed") {
+        alert("Allow microphone permission for Voice SOS.");
+      }
+    };
+
+    recognition.onend = () => {
+      setVoiceActive(false);
+    };
 
     recognitionRef.current = recognition;
-  }, [allContacts]);
+
+    return () => {
+      recognition.stop();
+    };
+  }, [allContacts.length]);
 
   const startVoiceSOS = () => {
     if (!recognitionRef.current) {
-      alert("Voice recognition not supported in this browser.");
+      alert("Voice recognition works only in Chrome/Edge.");
       return;
     }
 
     try {
       recognitionRef.current.start();
-      setVoiceActive(true);
-    } catch {
-      setVoiceActive(true);
+    } catch (error) {
+      console.log("Voice already active");
     }
   };
 
@@ -324,7 +347,7 @@ export default function SOSPanel() {
     return () => {
       window.removeEventListener("devicemotion", handleMotion);
     };
-  }, [crashDetection, active, allContacts]);
+  }, [crashDetection, active, allContacts.length]);
 
   const copyMessage = async () => {
     await navigator.clipboard.writeText(getEmergencyMessage());
@@ -336,13 +359,14 @@ export default function SOSPanel() {
   };
 
   return (
-    <section className="min-h-[75vh] py-10 flex items-center justify-center">
+    <section className="min-h-[75vh] py-10 flex items-center justify-center text-white">
       <audio
         ref={audioRef}
-        src="https://www.soundjay.com/misc/sounds/bell-ringing-05.wav"
+        loop
+        src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg"
       />
 
-      <div className="w-full max-w-6xl bg-[#111827]/70 border border-white/10 rounded-[2rem] p-8 md:p-12 shadow-2xl backdrop-blur-2xl">
+      <div className="w-full max-w-6xl bg-[#111827]/80 border border-white/10 rounded-[2rem] p-6 md:p-10 shadow-2xl backdrop-blur-2xl">
         <div className="text-center">
           <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 mb-6">
             <FaExclamationTriangle />
@@ -354,8 +378,8 @@ export default function SOSPanel() {
           </h1>
 
           <p className="mt-4 text-gray-400 text-lg">
-            Voice SOS, crash detection, SMS, WhatsApp, live GPS and medical
-            history sharing.
+            Sends emergency SMS and WhatsApp message with live location and
+            medical profile.
           </p>
         </div>
 
@@ -365,7 +389,6 @@ export default function SOSPanel() {
 
             <div>
               <p className="text-gray-400">Current Location</p>
-
               <h2 className="text-xl font-bold">
                 {location
                   ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`
@@ -382,7 +405,7 @@ export default function SOSPanel() {
             </div>
 
             <p className="mt-4 text-gray-400 text-xl">
-              Sending emergency alert with medical history...
+              Emergency alert will open automatically...
             </p>
 
             <button
@@ -410,7 +433,8 @@ export default function SOSPanel() {
             </h2>
 
             <p className="text-gray-400 mb-5">
-              If browser blocked auto send, tap below buttons manually.
+              Browser cannot send SMS/WhatsApp directly. Tap buttons if not
+              opened automatically.
             </p>
 
             <div className="space-y-4">
@@ -425,17 +449,24 @@ export default function SOSPanel() {
                   </div>
 
                   <div className="flex gap-3 flex-wrap">
+                    <a href={item.call}>
+                      <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
+                        <FaPhoneAlt />
+                        Call
+                      </button>
+                    </a>
+
                     <a href={item.sms}>
                       <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
                         <FaSms />
-                        Send SMS
+                        SMS
                       </button>
                     </a>
 
                     <a href={item.whatsapp} target="_blank" rel="noreferrer">
                       <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
                         <FaWhatsapp />
-                        Send WhatsApp
+                        WhatsApp
                       </button>
                     </a>
                   </div>
@@ -496,11 +527,9 @@ export default function SOSPanel() {
         </div>
 
         <div className="mt-14 bg-black/30 border border-white/10 rounded-3xl p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-3xl font-black text-cyan-400">
-              Emergency Contacts
-            </h2>
-          </div>
+          <h2 className="text-3xl font-black text-cyan-400">
+            Emergency Contacts
+          </h2>
 
           <div className="mt-6 grid md:grid-cols-3 gap-4">
             <input
@@ -527,60 +556,61 @@ export default function SOSPanel() {
           </div>
 
           <div className="mt-6 space-y-4">
-            {allContacts.map((contact, index) => (
-              <div
-                key={index}
-                className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-              >
-                <div>
-                  <h3 className="text-2xl font-bold">{contact.name}</h3>
-                  <p className="text-gray-400">{contact.phone}</p>
-                </div>
+            {allContacts.map((contact, index) => {
+              const phone = cleanPhone(contact.phone);
+              const message = getEmergencyMessage();
 
-                <div className="flex flex-wrap gap-3">
-                  <a href={`tel:${cleanPhone(contact.phone)}`}>
-                    <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
-                      <FaPhoneAlt />
-                      Call
-                    </button>
-                  </a>
+              return (
+                <div
+                  key={index}
+                  className="bg-black/40 border border-white/10 rounded-2xl p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div>
+                    <h3 className="text-2xl font-bold">{contact.name}</h3>
+                    <p className="text-gray-400">{phone}</p>
+                  </div>
 
-                  <a
-                    href={`sms:${cleanPhone(
-                      contact.phone
-                    )}?body=${encodeURIComponent(getEmergencyMessage())}`}
-                  >
-                    <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
-                      <FaSms />
-                      SMS
-                    </button>
-                  </a>
+                  <div className="flex flex-wrap gap-3">
+                    <a href={`tel:${phone}`}>
+                      <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
+                        <FaPhoneAlt />
+                        Call
+                      </button>
+                    </a>
 
-                  <a
-                    href={`https://wa.me/${cleanPhone(
-                      contact.phone
-                    )}?text=${encodeURIComponent(getEmergencyMessage())}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
-                      <FaWhatsapp />
-                      WhatsApp
-                    </button>
-                  </a>
+                    <a href={`sms:${phone}?body=${encodeURIComponent(message)}`}>
+                      <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
+                        <FaSms />
+                        SMS
+                      </button>
+                    </a>
 
-                  {index > 0 && (
-                    <button
-                      onClick={() => removeContact(index - 1)}
-                      className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold flex items-center gap-2"
+                    <a
+                      href={`https://wa.me/${phone}?text=${encodeURIComponent(
+                        message
+                      )}`}
+                      target="_blank"
+                      rel="noreferrer"
                     >
-                      <FaTrash />
-                      Remove
-                    </button>
-                  )}
+                      <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
+                        <FaWhatsapp />
+                        WhatsApp
+                      </button>
+                    </a>
+
+                    {index > 0 && (
+                      <button
+                        onClick={() => removeContact(index - 1)}
+                        className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold flex items-center gap-2"
+                      >
+                        <FaTrash />
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {allContacts.length === 0 && (
               <p className="text-center text-gray-400">
@@ -593,7 +623,7 @@ export default function SOSPanel() {
         <div className="mt-10 bg-black/30 border border-white/10 rounded-3xl p-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <h2 className="text-3xl font-black text-violet-400">
-              Emergency Message With Medical History
+              Emergency Message
             </h2>
 
             <button
