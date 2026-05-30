@@ -27,10 +27,28 @@ export default function SOSPanel() {
 
   const audioRef = useRef(null);
   const recognitionRef = useRef(null);
+  const voiceEnabledRef = useRef(false);
+  const contactsRef = useRef([]);
 
   const savedUser = JSON.parse(localStorage.getItem("roadsos_user")) || {};
   const medicalProfile =
     JSON.parse(localStorage.getItem("roadsos_medical_profile")) || {};
+
+  const cleanPhone = (phone) => {
+    let cleaned = String(phone || "").replace(/\D/g, "");
+    if (cleaned.length === 10) cleaned = `91${cleaned}`;
+    return cleaned;
+  };
+
+  const primaryContact = savedUser?.phone
+    ? [{ name: savedUser?.name || "Primary Contact", phone: savedUser.phone }]
+    : [];
+
+  const allContacts = [...primaryContact, ...extraContacts];
+
+  useEffect(() => {
+    contactsRef.current = allContacts;
+  }, [allContacts.length, extraContacts]);
 
   useEffect(() => {
     const savedExtra =
@@ -46,34 +64,9 @@ export default function SOSPanel() {
         });
       },
       () => console.log("Location permission denied"),
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }, []);
-
-  const cleanPhone = (phone) => {
-    let cleaned = String(phone || "").replace(/\D/g, "");
-
-    if (cleaned.length === 10) {
-      cleaned = `91${cleaned}`;
-    }
-
-    return cleaned;
-  };
-
-  const primaryContact = savedUser?.phone
-    ? [
-        {
-          name: savedUser?.name || "Primary Contact",
-          phone: savedUser.phone,
-        },
-      ]
-    : [];
-
-  const allContacts = [...primaryContact, ...extraContacts];
 
   const getEmergencyMessage = (customLocation = location) => {
     const locationText = customLocation
@@ -83,6 +76,7 @@ export default function SOSPanel() {
     return (
       `🚨 RoadSoS Emergency Alert 🚨\n\n` +
       `👤 Name: ${savedUser?.name || "User"}\n` +
+      `📞 Phone: ${savedUser?.phone || "Not set"}\n\n` +
       `📍 Live Location:\n${locationText}\n\n` +
       `🩺 Medical Information\n` +
       `Age: ${medicalProfile?.age || "Not set"}\n` +
@@ -97,49 +91,6 @@ export default function SOSPanel() {
       `Emergency Notes: ${medicalProfile?.emergencyNotes || "No notes"}\n\n` +
       `🚑 Immediate medical assistance required.`
     );
-  };
-
-  const addContact = () => {
-    if (!contactName.trim() || !contactPhone.trim()) {
-      alert("Enter contact name and phone number.");
-      return;
-    }
-
-    const cleanedPhone = cleanPhone(contactPhone);
-
-    if (cleanedPhone.length < 10) {
-      alert("Enter valid phone number.");
-      return;
-    }
-
-    const exists = allContacts.some(
-      (c) => cleanPhone(c.phone) === cleanedPhone
-    );
-
-    if (exists) {
-      alert("This number is already added.");
-      return;
-    }
-
-    const updated = [
-      ...extraContacts,
-      {
-        name: contactName.trim(),
-        phone: cleanedPhone,
-      },
-    ];
-
-    setExtraContacts(updated);
-    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
-
-    setContactName("");
-    setContactPhone("");
-  };
-
-  const removeContact = (index) => {
-    const updated = extraContacts.filter((_, i) => i !== index);
-    setExtraContacts(updated);
-    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
   };
 
   const startAlarm = () => {
@@ -157,7 +108,9 @@ export default function SOSPanel() {
   };
 
   const startSOS = () => {
-    if (allContacts.length === 0) {
+    const contacts = contactsRef.current;
+
+    if (!contacts || contacts.length === 0) {
       alert("Please add at least one emergency contact.");
       return;
     }
@@ -177,7 +130,7 @@ export default function SOSPanel() {
   const openEmergencyLinks = (liveLocation) => {
     const message = getEmergencyMessage(liveLocation);
 
-    const links = allContacts.map((contact) => {
+    const links = contactsRef.current.map((contact) => {
       const phone = cleanPhone(contact.phone);
 
       return {
@@ -219,11 +172,7 @@ export default function SOSPanel() {
         alert("Location permission denied. Sending message without location.");
         openEmergencyLinks(null);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   };
 
@@ -249,7 +198,10 @@ export default function SOSPanel() {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) {
+      console.log("Speech recognition not supported");
+      return;
+    }
 
     const recognition = new SpeechRecognition();
 
@@ -259,7 +211,7 @@ export default function SOSPanel() {
 
     recognition.onstart = () => {
       setVoiceActive(true);
-      console.log("Voice SOS started");
+      console.log("Voice SOS listening...");
     };
 
     recognition.onresult = (event) => {
@@ -271,54 +223,96 @@ export default function SOSPanel() {
 
       console.log("Heard:", transcript);
 
-      if (
-        transcript.includes("help") ||
-        transcript.includes("emergency") ||
-        transcript.includes("save me") ||
-        transcript.includes("sos")
-      ) {
-        recognition.stop();
+      const emergencyWords = [
+        "help",
+        "emergency",
+        "save me",
+        "sos",
+        "accident",
+        "bachao",
+        "madad",
+      ];
+
+      const detected = emergencyWords.some((word) =>
+        transcript.includes(word)
+      );
+
+      if (detected) {
+        console.log("Voice keyword detected. Starting SOS countdown.");
+
+        voiceEnabledRef.current = false;
+
+        try {
+          recognition.stop();
+        } catch {}
+
         setVoiceActive(false);
-        startSOS();
+
+        setSendLinks([]);
+        setCountdown(5);
+        setActive(true);
+
+        setTimeout(() => {
+          startAlarm();
+        }, 100);
       }
     };
 
     recognition.onerror = (event) => {
       console.log("Voice error:", event.error);
-      setVoiceActive(false);
 
       if (event.error === "not-allowed") {
-        alert("Allow microphone permission for Voice SOS.");
+        alert("Microphone permission denied. Allow mic permission.");
+        voiceEnabledRef.current = false;
+        setVoiceActive(false);
       }
     };
 
     recognition.onend = () => {
-      setVoiceActive(false);
+      if (voiceEnabledRef.current) {
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch {}
+        }, 500);
+      } else {
+        setVoiceActive(false);
+      }
     };
 
     recognitionRef.current = recognition;
 
     return () => {
-      recognition.stop();
+      voiceEnabledRef.current = false;
+      try {
+        recognition.stop();
+      } catch {}
     };
-  }, [allContacts.length]);
+  }, []);
 
   const startVoiceSOS = () => {
     if (!recognitionRef.current) {
-      alert("Voice recognition works only in Chrome/Edge.");
+      alert("Voice SOS works only in Chrome or Edge.");
       return;
     }
 
+    voiceEnabledRef.current = true;
+
     try {
       recognitionRef.current.start();
-    } catch (error) {
-      console.log("Voice already active");
+      setVoiceActive(true);
+    } catch {
+      console.log("Voice already running");
     }
   };
 
   const stopVoiceSOS = () => {
+    voiceEnabledRef.current = false;
+
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch {}
     }
 
     setVoiceActive(false);
@@ -344,18 +338,53 @@ export default function SOSPanel() {
 
     window.addEventListener("devicemotion", handleMotion);
 
-    return () => {
-      window.removeEventListener("devicemotion", handleMotion);
-    };
-  }, [crashDetection, active, allContacts.length]);
+    return () => window.removeEventListener("devicemotion", handleMotion);
+  }, [crashDetection, active]);
+
+  const addContact = () => {
+    if (!contactName.trim() || !contactPhone.trim()) {
+      alert("Enter contact name and phone number.");
+      return;
+    }
+
+    const cleanedPhone = cleanPhone(contactPhone);
+
+    if (cleanedPhone.length < 10) {
+      alert("Enter valid phone number.");
+      return;
+    }
+
+    const exists = allContacts.some(
+      (c) => cleanPhone(c.phone) === cleanedPhone
+    );
+
+    if (exists) {
+      alert("This number is already added.");
+      return;
+    }
+
+    const updated = [
+      ...extraContacts,
+      { name: contactName.trim(), phone: cleanedPhone },
+    ];
+
+    setExtraContacts(updated);
+    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
+
+    setContactName("");
+    setContactPhone("");
+  };
+
+  const removeContact = (index) => {
+    const updated = extraContacts.filter((_, i) => i !== index);
+    setExtraContacts(updated);
+    localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
+  };
 
   const copyMessage = async () => {
     await navigator.clipboard.writeText(getEmergencyMessage());
     setCopied(true);
-
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -378,15 +407,14 @@ export default function SOSPanel() {
           </h1>
 
           <p className="mt-4 text-gray-400 text-lg">
-            Sends emergency SMS and WhatsApp message with live location and
-            medical profile.
+            Voice SOS, crash detection, SMS, WhatsApp, location and medical
+            profile sharing.
           </p>
         </div>
 
         <div className="mt-8 bg-black/30 border border-white/10 rounded-3xl p-6">
           <div className="flex items-center gap-4">
             <FaMapMarkerAlt className="text-red-500 text-3xl" />
-
             <div>
               <p className="text-gray-400">Current Location</p>
               <h2 className="text-xl font-bold">
@@ -403,11 +431,9 @@ export default function SOSPanel() {
             <div className="text-9xl font-black text-red-500 animate-pulse">
               {countdown}
             </div>
-
             <p className="mt-4 text-gray-400 text-xl">
               Emergency alert will open automatically...
             </p>
-
             <button
               onClick={cancelSOS}
               className="mt-8 px-10 py-4 bg-white text-black rounded-2xl text-xl font-black hover:bg-gray-200"
@@ -426,56 +452,6 @@ export default function SOSPanel() {
           </div>
         )}
 
-        {sendLinks.length > 0 && (
-          <div className="mt-10 bg-red-500/10 border border-red-500/30 rounded-3xl p-6">
-            <h2 className="text-2xl font-black text-red-400 mb-4">
-              Emergency Alert Links
-            </h2>
-
-            <p className="text-gray-400 mb-5">
-              Browser cannot send SMS/WhatsApp directly. Tap buttons if not
-              opened automatically.
-            </p>
-
-            <div className="space-y-4">
-              {sendLinks.map((item, index) => (
-                <div
-                  key={index}
-                  className="bg-black/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div>
-                    <h3 className="font-bold text-xl">{item.name}</h3>
-                    <p className="text-gray-400">{item.phone}</p>
-                  </div>
-
-                  <div className="flex gap-3 flex-wrap">
-                    <a href={item.call}>
-                      <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
-                        <FaPhoneAlt />
-                        Call
-                      </button>
-                    </a>
-
-                    <a href={item.sms}>
-                      <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
-                        <FaSms />
-                        SMS
-                      </button>
-                    </a>
-
-                    <a href={item.whatsapp} target="_blank" rel="noreferrer">
-                      <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
-                        <FaWhatsapp />
-                        WhatsApp
-                      </button>
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="mt-10 grid md:grid-cols-2 gap-5">
           <div className="bg-black/30 border border-white/10 rounded-3xl p-6 text-center">
             {voiceActive ? (
@@ -484,7 +460,7 @@ export default function SOSPanel() {
                 className="px-8 py-4 rounded-2xl bg-red-600 hover:bg-red-700 font-black text-xl flex items-center gap-3 mx-auto"
               >
                 <FaMicrophone />
-                Stop Voice SOS
+                Listening... Stop Voice SOS
               </button>
             ) : (
               <button
@@ -497,10 +473,11 @@ export default function SOSPanel() {
             )}
 
             <p className="mt-4 text-gray-400">
-              Say: <span className="text-cyan-400">help</span>,{" "}
+              Say <span className="text-cyan-400">help</span>,{" "}
+              <span className="text-cyan-400">sos</span>,{" "}
               <span className="text-cyan-400">emergency</span>,{" "}
-              <span className="text-cyan-400">save me</span>, or{" "}
-              <span className="text-cyan-400">sos</span>
+              <span className="text-cyan-400">bachao</span>, or{" "}
+              <span className="text-cyan-400">madad</span>
             </p>
           </div>
 
@@ -526,6 +503,48 @@ export default function SOSPanel() {
           </div>
         </div>
 
+        {sendLinks.length > 0 && (
+          <div className="mt-10 bg-red-500/10 border border-red-500/30 rounded-3xl p-6">
+            <h2 className="text-2xl font-black text-red-400 mb-4">
+              Emergency Alert Links
+            </h2>
+
+            <div className="space-y-4">
+              {sendLinks.map((item, index) => (
+                <div
+                  key={index}
+                  className="bg-black/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div>
+                    <h3 className="font-bold text-xl">{item.name}</h3>
+                    <p className="text-gray-400">{item.phone}</p>
+                  </div>
+
+                  <div className="flex gap-3 flex-wrap">
+                    <a href={item.call}>
+                      <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
+                        <FaPhoneAlt /> Call
+                      </button>
+                    </a>
+
+                    <a href={item.sms}>
+                      <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
+                        <FaSms /> SMS
+                      </button>
+                    </a>
+
+                    <a href={item.whatsapp} target="_blank" rel="noreferrer">
+                      <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
+                        <FaWhatsapp /> WhatsApp
+                      </button>
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-14 bg-black/30 border border-white/10 rounded-3xl p-6">
           <h2 className="text-3xl font-black text-cyan-400">
             Emergency Contacts
@@ -550,8 +569,7 @@ export default function SOSPanel() {
               onClick={addContact}
               className="px-5 py-4 rounded-xl bg-cyan-600 hover:bg-cyan-700 font-bold flex items-center justify-center gap-2"
             >
-              <FaPlus />
-              Add Contact
+              <FaPlus /> Add Contact
             </button>
           </div>
 
@@ -573,15 +591,13 @@ export default function SOSPanel() {
                   <div className="flex flex-wrap gap-3">
                     <a href={`tel:${phone}`}>
                       <button className="px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 font-bold flex items-center gap-2">
-                        <FaPhoneAlt />
-                        Call
+                        <FaPhoneAlt /> Call
                       </button>
                     </a>
 
                     <a href={`sms:${phone}?body=${encodeURIComponent(message)}`}>
                       <button className="px-5 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-black font-bold flex items-center gap-2">
-                        <FaSms />
-                        SMS
+                        <FaSms /> SMS
                       </button>
                     </a>
 
@@ -593,8 +609,7 @@ export default function SOSPanel() {
                       rel="noreferrer"
                     >
                       <button className="px-5 py-3 rounded-xl bg-green-600 hover:bg-green-700 font-bold flex items-center gap-2">
-                        <FaWhatsapp />
-                        WhatsApp
+                        <FaWhatsapp /> WhatsApp
                       </button>
                     </a>
 
@@ -603,8 +618,7 @@ export default function SOSPanel() {
                         onClick={() => removeContact(index - 1)}
                         className="px-5 py-3 rounded-xl bg-white/10 hover:bg-white/20 font-bold flex items-center gap-2"
                       >
-                        <FaTrash />
-                        Remove
+                        <FaTrash /> Remove
                       </button>
                     )}
                   </div>
