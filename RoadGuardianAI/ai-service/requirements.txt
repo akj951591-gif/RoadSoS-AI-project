@@ -5,3 +5,5 @@ flask
 flask-cors
 opencv-python
 requests
+mysql-connector-python
+python-dotenv

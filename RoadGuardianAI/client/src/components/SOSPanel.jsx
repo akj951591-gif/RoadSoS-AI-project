@@ -22,6 +22,7 @@ export default function SOSPanel() {
   const [crashDetection, setCrashDetection] = useState(false);
   const [impactValue, setImpactValue] = useState(0);
   const [sendLinks, setSendLinks] = useState([]);
+
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
 
@@ -29,8 +30,6 @@ export default function SOSPanel() {
   const recognitionRef = useRef(null);
 
   const savedUser = JSON.parse(localStorage.getItem("roadsos_user")) || {};
-  const medicalProfile =
-    JSON.parse(localStorage.getItem("roadsos_medical_profile")) || {};
 
   useEffect(() => {
     const savedExtra =
@@ -79,26 +78,16 @@ export default function SOSPanel() {
     const lat = customLocation?.lat || "Location not available";
     const lng = customLocation?.lng || "";
 
-    const locationText = customLocation
-      ? `https://maps.google.com/?q=${lat},${lng}`
-      : "Location permission not available";
-
     return (
       `🚨 RoadSoS Emergency Alert 🚨\n\n` +
-      `👤 Name: ${savedUser?.name || "User"}\n` +
-      `📍 Live Location:\n${locationText}\n\n` +
-      `🩺 Medical Information\n` +
-      `Age: ${medicalProfile?.age || "Not set"}\n` +
-      `Blood Group: ${medicalProfile?.bloodGroup || "Not set"}\n` +
-      `Weight: ${medicalProfile?.weight || "Not set"}\n` +
-      `Height: ${medicalProfile?.height || "Not set"}\n` +
-      `Allergies: ${medicalProfile?.allergies || "None"}\n` +
-      `Current Medication: ${medicalProfile?.medication || "None"}\n` +
-      `Chronic Disease: ${medicalProfile?.chronicDisease || "None"}\n` +
-      `Past Surgery: ${medicalProfile?.pastSurgery || "None"}\n` +
-      `Organ Donor: ${medicalProfile?.organDonor || "No"}\n` +
-      `Emergency Notes: ${medicalProfile?.emergencyNotes || "No notes"}\n\n` +
-      `🚑 Immediate medical assistance required.`
+      `${savedUser?.name || "User"} needs immediate help.\n\n` +
+      `📍 Live Location:\n` +
+      `${
+        customLocation
+          ? `https://maps.google.com/?q=${lat},${lng}`
+          : "Location permission not available"
+      }\n\n` +
+      `Please contact emergency services immediately.`
     );
   };
 
@@ -143,6 +132,7 @@ export default function SOSPanel() {
 
   const removeContact = (extraIndex) => {
     const updated = extraContacts.filter((_, i) => i !== extraIndex);
+
     setExtraContacts(updated);
     localStorage.setItem("roadsos_extra_contacts", JSON.stringify(updated));
   };
@@ -354,8 +344,8 @@ export default function SOSPanel() {
           </h1>
 
           <p className="mt-4 text-gray-400 text-lg">
-            Voice SOS, crash detection, SMS, WhatsApp, live GPS and medical
-            history sharing.
+            Voice SOS, crash detection, SMS, WhatsApp and live GPS emergency
+            alert.
           </p>
         </div>
 
@@ -382,7 +372,7 @@ export default function SOSPanel() {
             </div>
 
             <p className="mt-4 text-gray-400 text-xl">
-              Sending emergency alert with medical history...
+              Sending emergency alert to all emergency contacts...
             </p>
 
             <button
@@ -593,7 +583,7 @@ export default function SOSPanel() {
         <div className="mt-10 bg-black/30 border border-white/10 rounded-3xl p-6">
           <div className="flex items-center justify-between gap-4 flex-wrap">
             <h2 className="text-3xl font-black text-violet-400">
-              Emergency Message With Medical History
+              Emergency Message
             </h2>
 
             <button
@@ -608,7 +598,7 @@ export default function SOSPanel() {
           <textarea
             readOnly
             value={getEmergencyMessage()}
-            className="mt-5 w-full h-72 rounded-2xl bg-black/50 border border-white/10 p-5 text-gray-300 outline-none resize-none"
+            className="mt-5 w-full h-52 rounded-2xl bg-black/50 border border-white/10 p-5 text-gray-300 outline-none resize-none"
           />
         </div>
       </div>
