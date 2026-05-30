@@ -76,7 +76,6 @@ export default function SOSPanel() {
     return (
       `🚨 RoadSoS Emergency Alert 🚨\n\n` +
       `👤 Name: ${savedUser?.name || "User"}\n` +
-      `📞 Phone: ${savedUser?.phone || "Not set"}\n\n` +
       `📍 Live Location:\n${locationText}\n\n` +
       `🩺 Medical Information\n` +
       `Age: ${medicalProfile?.age || "Not set"}\n` +
