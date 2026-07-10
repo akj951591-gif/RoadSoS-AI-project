@@ -256,12 +256,7 @@ export default function DashboardHome({ setActiveTab }) {
           </div>
 
           <div className="mt-8 grid md:grid-cols-3 gap-5">
-            <MiniInfo
-              title="Primary Emergency No."
-              value={savedUser?.phone || "Not Set"}
-              icon={<FaPhoneAlt />}
-              color="text-cyan-400"
-            />
+        
 
             <MiniInfo
               title="Location"
